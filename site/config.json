@@ -1,0 +1,132 @@
+{
+  "_help": "DEMO website copy: contains SAMPLE recipes only. The Sheet key is never here.",
+  "appName": "Prism",
+  "ownerPin": "1234",
+  "sheet": {
+    "url": "",
+    "key": ""
+  },
+  "categoryColors": {
+    "Polymers & Plastics": "#0066FF",
+    "Specialty Catalysts": "#00F5A0",
+    "Industrial Solvents": "#FF9F00",
+    "Agri-Chemicals": "#A855F7"
+  },
+  "materials": [
+    {
+      "code": "R1",
+      "name": "R1",
+      "name_hi": "R1",
+      "unit": "kg",
+      "color": "#FF4D4D",
+      "containers": [
+        {
+          "name": "Bag",
+          "name_hi": "बोरी",
+          "size": 25
+        }
+      ]
+    },
+    {
+      "code": "R5",
+      "name": "R5",
+      "name_hi": "R5",
+      "unit": "kg",
+      "color": "#C81D3A"
+    },
+    {
+      "code": "Y1",
+      "name": "Y1",
+      "name_hi": "Y1",
+      "unit": "kg",
+      "color": "#FFF06A"
+    },
+    {
+      "code": "Y5",
+      "name": "Y5",
+      "name_hi": "Y5",
+      "unit": "kg",
+      "color": "#FFC21A"
+    },
+    {
+      "code": "Y8",
+      "name": "Y8",
+      "name_hi": "Y8",
+      "unit": "kg",
+      "color": "#D9A400"
+    },
+    {
+      "code": "S1",
+      "name": "S1",
+      "name_hi": "S1",
+      "unit": "kg",
+      "color": "#FFFFFF"
+    },
+    {
+      "code": "S2",
+      "name": "S2",
+      "name_hi": "S2",
+      "unit": "kg",
+      "color": "#CBD5E1"
+    },
+    {
+      "code": "S3",
+      "name": "S3",
+      "name_hi": "S3",
+      "unit": "kg",
+      "color": "#8E9BAE"
+    },
+    {
+      "code": "P2",
+      "name": "P2",
+      "name_hi": "P2",
+      "unit": "kg",
+      "color": "#A855F7"
+    }
+  ],
+  "products": [
+    {
+      "name": "Y111",
+      "name_hi": "Y111",
+      "batchNote": "Sample · 1 batch = 1 kg",
+      "batchNote_hi": "नमूना · 1 बैच = 1 kg",
+      "category": "",
+      "color": "#FFD23F",
+      "recipe": {
+        "Y1": 0.8,
+        "Y5": 0.3,
+        "P2": 0.1
+      }
+    },
+    {
+      "name": "Y48",
+      "name_hi": "Y48",
+      "batchNote": "Sample · 1 batch = 1 kg",
+      "batchNote_hi": "नमूना · 1 बैच = 1 kg",
+      "category": "",
+      "color": "#FF9F00",
+      "recipe": {
+        "Y1": 0.5,
+        "Y5": 0.5,
+        "P2": 0.2
+      }
+    },
+    {
+      "name": "Pink7",
+      "name_hi": "Pink7",
+      "batchNote": "Sample · 1 batch = 1 kg",
+      "batchNote_hi": "नमूना · 1 बैच = 1 kg",
+      "category": "",
+      "color": "#FF4D8D",
+      "recipe": {
+        "R1": 0.6,
+        "S1": 0.2,
+        "S2": 0.4
+      }
+    }
+  ],
+  "workers": [
+    "Salimbhai",
+    "Son"
+  ]
+}

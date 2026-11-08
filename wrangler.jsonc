@@ -1,0 +1,10 @@
+// Cloudflare deploy settings. Cloudflare reads this when GitHub sends it a new version.
+// "name" must stay the same as the project in the Cloudflare dashboard.
+{
+  "name": "prism-tracker",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    // the website copy made by: python3 tools/make_website.py
+    "directory": "./site"
+  }
+}

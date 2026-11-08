@@ -1,0 +1,12 @@
+# Local test data and build leftovers
+dev-data/
+.DS_Store
+node_modules/
+android/
+tools/shortcuts/build/
+prism-website.zip
+.claude/
+.wrangler/
+
+# site/ IS saved on purpose: Cloudflare publishes it straight from GitHub.
+# Build it with:  python3 tools/make_website.py   (add --demo for sample products)
