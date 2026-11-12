@@ -27,10 +27,22 @@ The website never contains recipes or the secret key. Phones get the recipes fro
 5. **Upload:** drag **`prism-website.zip`** into the upload box → **Deploy site**.
 6. **Check it:** open the link on the Mac. You should see the Prism "Who are you?" screen.
 
-**Updating later:**
-1. Run `python3 tools/make_website.py` again.
-2. In Cloudflare, open **Workers & Pages** → **prism-tracker** → **Deployments** → **Upload** / **Create new deployment**, then drag in the new zip.
-   If the button names differ, look for the option to upload new files to the same project.
+**Updating later (automatic, through GitHub):**
+
+The project is in the private GitHub repository **unbiddenautonomy/prism-tracker**. Cloudflare publishes the `site/` folder from it every time a new version is pushed.
+
+1. Rebuild the website copy:
+   ```bash
+   python3 tools/make_website.py
+   ```
+   Add `--demo` to include the sample products.
+2. Save and push:
+   ```bash
+   git add -A && git commit -m "What changed" && git push
+   ```
+3. The site updates within a minute or two. Build logs are in Cloudflare: **prism-tracker → Deployments → View build history**.
+
+No more zip uploads.
 
 Phones pick up the new version the next time they open the app with internet. If one doesn't, close the app fully and open it again.
 
