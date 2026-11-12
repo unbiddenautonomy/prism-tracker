@@ -30,6 +30,27 @@ def as_plain_script(src):
     return "\n".join(out).strip() + "\n"
 
 
+def to_ascii(text):
+    """Write every non-ASCII character as a \\uXXXX escape.
+
+    The file is copied and pasted into Google, and some Mac copy tools read it as
+    "Mac Roman", which garbles "·" into "¬∑" and Hindi into "‡§...". With only
+    ASCII in the file, any copy method gives the same text. JavaScript reads the
+    escapes back as the real characters (they are only in strings and comments).
+    """
+    out = []
+    for ch in text:
+        cp = ord(ch)
+        if cp < 128:
+            out.append(ch)
+        elif cp < 0x10000:
+            out.append("\\u%04x" % cp)
+        else:
+            cp -= 0x10000
+            out.append("\\u%04x\\u%04x" % (0xD800 + (cp >> 10), 0xDC00 + (cp & 0x3FF)))
+    return "".join(out)
+
+
 def main():
     config = json.loads(read("app", "config.json"))
     seed = {k: config[k] for k in ("appName", "ownerPin", "categoryColors", "materials", "products", "workers") if k in config}
@@ -49,7 +70,7 @@ def main():
         read("google-sheet", "server.js").strip(),
         "",
     ]
-    text = "\n".join(parts)
+    text = to_ascii("\n".join(parts))
     out_path = os.path.join(ROOT, "google-sheet", "Code.gs")
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(text)

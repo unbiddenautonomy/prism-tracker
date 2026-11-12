@@ -103,6 +103,7 @@ When you get a new `Code.gs`:
 1. Paste it over the old one and click **Save**.
 2. Go to **Deploy → Manage deployments** and click ✏️ **Edit**.
 3. Set **Version: New version** and click **Deploy**.
+4. Reload the Sheet, then click **Prism → Set up / repair this sheet**. It's safe to run any time: it keeps your data and also fixes any garbled text (like `¬∑` or `‡§`).
 
 The link stays the same, so nothing changes on the phones.
 

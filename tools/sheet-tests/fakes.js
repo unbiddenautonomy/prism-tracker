@@ -8,6 +8,10 @@ var __triggers = [];
 function FakeRange(sheet, row, col, nr, nc) {
   this.sheet = sheet; this.row = row; this.col = col; this.nr = nr; this.nc = nc;
 }
+FakeRange.prototype.getValue = function () { return this.getValues()[0][0]; };
+FakeRange.prototype.getFormulas = function () {
+  return this.getValues().map(function (line) { return line.map(function () { return ''; }); });
+};
 FakeRange.prototype.getValues = function () {
   var out = [];
   for (var r = 0; r < this.nr; r++) {

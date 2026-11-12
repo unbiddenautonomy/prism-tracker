@@ -167,4 +167,28 @@ check('send-now uses Report email', __mail.length === 2 && __mail[1].to === 'bos
 // 13. doGet
 check('doGet works', JSON.parse(doGet().getContent()).ok === true);
 
+// 14. garbled text (Mac Roman copy) is repaired; good text is left alone
+var garbled = [
+  ['Sample \u00b7 1 batch = 1 kg', 'Sample \u00ac\u2211 1 batch = 1 kg'],
+  ['\u0928\u092e\u0942\u0928\u093e \u00b7 1 \u092c\u0948\u091a = 1 kg', '\u2021\u00a7\u00ae\u2021\u00a7\u00c6\u2021\u2022\u00c7\u2021\u00a7\u00ae\u2021\u00a7\u00e6 \u00ac\u2211 1 \u2021\u00a7\u00a8\u2021\u2022\u00e0\u2021\u00a7\u00f6 = 1 kg'],
+  ['\u092c\u094b\u0930\u0940', '\u2021\u00a7\u00a8\u2021\u2022\u00e3\u2021\u00a7\u221e\u2021\u2022\u00c4'],
+  ['Prism \u2014 Daily report', 'Prism \u201a\u00c4\u00ee Daily report'],
+  ['1\u201312 Nov', '1\u201a\u00c4\u00ec12 Nov'],
+  ['caf\u00e9 \u270f\ufe0f \ud83d\udca7', 'caf\u221a\u00a9 \u201a\u00fa\u00e8\u00d4\u220f\u00e8 \uf8ff\u00fc\u00ed\u00df']
+];
+garbled.forEach(function (p) { check('fixes garbled ' + p[0], fixGarbled_(p[1]) === p[0], fixGarbled_(p[1])); });
+check('fixes text garbled twice', fixGarbled_(garbled[1][1].split('').map(function (ch) {
+  var b = []; unescape(encodeURIComponent(ch)).split('').forEach(function (c) { b.push(c.charCodeAt(0)); });
+  return b.map(function (x) { return x < 128 ? String.fromCharCode(x) : MAC_ROMAN_.charAt(x - 128); }).join('');
+}).join('')) === garbled[1][0]);
+garbled.forEach(function (p) { check('leaves good text alone: ' + p[0], fixGarbled_(p[0]) === p[0]); });
+check('leaves numbers and dates alone', fixGarbled_(25) === 25 && fixGarbled_('') === '');
+check('leaves odd but real text alone', fixGarbled_('¬ 5 ∑') === '¬ 5 ∑' && fixGarbled_('Ä') === 'Ä');
+sheet('Recipes').getRange(2, 3).setValue(garbled[0][1]);
+sheet('Materials').getRange(2, 6).setValue(garbled[2][1]);
+setup();
+check('setup repairs garbled cells', sheet('Recipes').getRange(2, 3).getValue() === garbled[0][0] && sheet('Materials').getRange(2, 6).getValue() === garbled[2][0],
+  [sheet('Recipes').getRange(2, 3).getValue(), sheet('Materials').getRange(2, 6).getValue()]);
+check('repair leaves the rest of the sheet alone', rows('Recipes').length === 3 && rows('Materials').length === 9 && repairText_(__ss) === 0);
+
 console.log(__fails ? ('\n' + __fails + ' FAILED') : '\nALL PASSED');

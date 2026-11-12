@@ -564,6 +564,86 @@ function notify_(msg) {
   }
 }
 
+// ---------------- repair garbled text ----------------
+// If this script was copied on a Mac by a tool that read it as "Mac Roman"
+// instead of UTF-8, text like "·" ends up as "¬∑" and Hindi as "‡§¨‡•ã...".
+// fixGarbled_ undoes exactly that, and leaves any other text untouched.
+
+const MAC_ROMAN_ =
+  'ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõúùûü†°¢£§•¶ß®©™´¨≠ÆØ∞±≤≥¥µ∂∑∏π∫ªºΩæø¿¡¬√ƒ≈∆«»… ÀÃÕŒœ–—“”‘’÷◊ÿŸ⁄€‹›ﬁﬂ‡·‚„‰ÂÊÁËÈÍÎÏÌÓÔÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ';
+
+function macRomanByte_(ch) {
+  const code = ch.charCodeAt(0);
+  if (code < 128) return code;
+  if (ch === '¤') return 0xdb; // older Mac Roman tables
+  const i = MAC_ROMAN_.indexOf(ch);
+  return i < 0 ? -1 : 128 + i;
+}
+
+// Strict UTF-8 decode; returns null if the bytes are not valid UTF-8.
+function utf8Decode_(bytes) {
+  let out = '';
+  for (let i = 0; i < bytes.length; ) {
+    const b = bytes[i];
+    let need, cp;
+    if (b < 0x80) { out += String.fromCharCode(b); i++; continue; }
+    else if (b >= 0xc2 && b <= 0xdf) { need = 1; cp = b & 0x1f; }
+    else if (b >= 0xe0 && b <= 0xef) { need = 2; cp = b & 0x0f; }
+    else if (b >= 0xf0 && b <= 0xf4) { need = 3; cp = b & 0x07; }
+    else return null;
+    for (let k = 1; k <= need; k++) {
+      const c = bytes[i + k];
+      if (c === undefined || (c & 0xc0) !== 0x80) return null;
+      cp = (cp << 6) | (c & 0x3f);
+    }
+    if ((need === 2 && cp < 0x800) || (need === 3 && (cp < 0x10000 || cp > 0x10ffff)) || (cp >= 0xd800 && cp <= 0xdfff)) return null;
+    out += String.fromCodePoint(cp);
+    i += need + 1;
+  }
+  return out;
+}
+
+function fixGarbled_(s) {
+  if (typeof s !== 'string' || !/[^\x00-\x7f]/.test(s)) return s;
+  for (let round = 0; round < 3; round++) {
+    const bytes = [];
+    for (const ch of s) {
+      const b = macRomanByte_(ch);
+      if (b < 0) return s;
+      bytes.push(b);
+    }
+    const fixed = utf8Decode_(bytes);
+    if (fixed === null || fixed === s) return s;
+    s = fixed;
+    if (!/[^\x00-\x7f]/.test(s)) return s;
+  }
+  return s;
+}
+
+// Fixes garbled text in every tab. Returns how many cells changed.
+function repairText_(ss) {
+  let changed = 0;
+  ss.getSheets().forEach((sh) => {
+    const rows = sh.getLastRow();
+    const cols = sh.getLastColumn();
+    if (!rows || !cols) return;
+    const range = sh.getRange(1, 1, rows, cols);
+    const values = range.getValues();
+    const formulas = range.getFormulas();
+    values.forEach((row, r) =>
+      row.forEach((v, c) => {
+        if (formulas[r][c]) return;
+        const fixed = fixGarbled_(v);
+        if (fixed !== v) {
+          sh.getRange(r + 1, c + 1).setValue(fixed);
+          changed++;
+        }
+      })
+    );
+  });
+  return changed;
+}
+
 // ---------------- one-time setup ----------------
 
 function setup() {
@@ -622,9 +702,12 @@ function setup() {
   });
   ScriptApp.newTrigger('hourlyCheck').timeBased().everyHours(1).create();
 
+  const fixedCells = repairText_(ss);
+
   const s = readSettings_();
   const msg =
     'Prism sheet is ready.\n\n' +
+    (fixedCells ? 'Fixed garbled text in ' + fixedCells + ' cells.\n' : '') +
     'Secret key: ' + s.key + '\n' +
     'Time zone: ' + ss.getSpreadsheetTimeZone() + '\n' +
     'Daily email: after ' + s.hour + ':00 to ' + (s.email || Session.getEffectiveUser().getEmail()) + '\n\n' +
