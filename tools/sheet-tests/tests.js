@@ -191,4 +191,71 @@ check('setup repairs garbled cells', sheet('Recipes').getRange(2, 3).getValue() 
   [sheet('Recipes').getRange(2, 3).getValue(), sheet('Materials').getRange(2, 6).getValue()]);
 check('repair leaves the rest of the sheet alone', rows('Recipes').length === 3 && rows('Materials').length === 9 && repairText_(__ss) === 0);
 
+// 15. raw material stock
+function sRow(code) { return rows('Stock').filter(function (r) { return r[0] === code; })[0]; }
+function stockOf(list, code) { return list.filter(function (r) { return r.code === code; })[0]; }
+var mailBefore = __mail.length;
+var st = [
+  mk('p0', { type: 'production', product: 'Y111', batches: 1, date: yesterday, time: '08:00', lines: [{ material: 'S2', qty: 5, unit: 'kg' }] }),
+  mk('st1', { type: 'stock', move: 'in', material: 'S2', qty: 100, unit: 'kg', date: yesterday, time: '10:00', worker: 'Owner', phone: 'Admin', note: 'delivery', lines: [{ material: 'S2', qty: 100, unit: 'kg' }] }),
+  mk('p1', { type: 'production', product: 'Y111', batches: 1, time: '09:00', lines: [{ material: 'S2', qty: 30, unit: 'kg' }] }),
+  mk('w1', { type: 'waste', material: 'S2', qty: 10, unit: 'kg', reason: 'spill', lines: [{ material: 'S2', qty: 10, unit: 'kg' }] }),
+  mk('st2', { type: 'stock', move: 'out', material: 'S2', qty: 5, unit: 'kg', time: '12:00', worker: 'Owner', phone: 'Admin', lines: [{ material: 'S2', qty: 5, unit: 'kg' }] }),
+];
+res = post({ key: s.key, action: 'sync', phone: 'Admin', worker: 'Owner', entries: st });
+check('stock entries sync', res.ok && res.saved.length === 5, res);
+var stRows = rows('Entries').filter(function (r) { return r[colOf_('id') - 1] === 'st1' || r[colOf_('id') - 1] === 'st2'; });
+check('stock rows labelled Stock in / Stock out', stRows.length === 2 && stRows[0][colOf_('type') - 1] === 'Stock in' && stRows[1][colOf_('type') - 1] === 'Stock out', stRows.map(function (r) { return r[colOf_('type') - 1]; }));
+check('stock in Material Use', rows('Material Use').filter(function (r) { return r[9] === 'st1' && r[1] === 'Stock in' && r[3] === 100; }).length === 1);
+var back = readAllEntries_().filter(function (e) { return e.id === 'st2'; })[0];
+check('stock entry read back with direction', back.type === 'stock' && back.move === 'out' && back.qty === 5, back);
+var stockNow = stockNow_();
+var s2 = stockOf(stockNow, 'S2');
+check('S2 left = 100 - 5 removed - 30 used - 10 wasted (batch before first stock ignored)', s2.tracked && s2.left === 55 && s2.used === 30 && s2.wasted === 10 && s2.removed === 5, s2);
+check('S2 today: 5 removed, 30 used, 10 wasted', s2.day.removed === 5 && s2.day.used === 30 && s2.day.wasted === 10 && s2.day.added === 0, s2.day);
+check('S2 counted since yesterday', s2.since === yesterday, s2.since);
+check('materials without stock are not tracked', !stockOf(stockNow, 'Y1').tracked && stockOf(stockNow, 'Y1').left === 0);
+check('stock yesterday = 100', stockOf(computeStock(readAllEntries_(), readConfig_(), yesterday), 'S2').left === 100);
+check('Stock tab written', sRow('S2') && sRow('S2')[7] === 55 && sRow('S2')[9] === 'OK' && sRow('S2')[2] === yesterday, sRow('S2'));
+check('Stock tab: untracked shown as not counted', sRow('Y1')[2] === 'not counted yet' && sRow('Y1')[7] === '', sRow('Y1'));
+check('no alert email without an alert level', __mail.length === mailBefore, __mail.length - mailBefore);
+var model2 = buildReportModel({ entries: readAllEntries_(), config: readConfig_(), date: today, source: 'sheet' });
+check('stock entries are not counted as production or a worker', model2.today.workers.every(function (w) { return w.worker !== 'Owner'; }) && model2.today.entryCount === model.today.entryCount + 2, model2.today.workers);
+
+// alert level from the admin app
+var bad1 = post({ key: s.key, action: 'setLowStock', material: 'S2', value: 'lots' });
+check('bad alert level rejected', !bad1.ok && bad1.error === 'bad-number', bad1);
+var bad2 = post({ key: s.key, action: 'setLowStock', material: 'Q9', value: 5 });
+check('unknown material rejected', !bad2.ok && bad2.error === 'unknown-material', bad2);
+var setRes = post({ key: s.key, action: 'setLowStock', material: 'S2', value: 60 });
+check('alert level saved', setRes.ok && stockOf(setRes.config.materials, 'S2').lowStock === 60 && sheet('Materials').getRange(8, 9).getValue() === 60, setRes);
+check('Materials has the alert column', sheet('Materials').getRange(1, 9).getValue() === 'Low stock alert');
+check('S2 now low (55 < 60)', stockOf(setRes.stock, 'S2').low && sRow('S2')[9] === 'LOW');
+check('low stock email sent at once', __mail.length === mailBefore + 1 && __mail[__mail.length - 1].subject.indexOf('low stock') >= 0 && __mail[__mail.length - 1].subject.indexOf('S2') >= 0, __mail[__mail.length - 1] && __mail[__mail.length - 1].subject);
+check('low stock email lists left + alert level', __mail[__mail.length - 1].htmlBody.indexOf('55 kg') >= 0 && __mail[__mail.length - 1].htmlBody.indexOf('60 kg') >= 0);
+post({ key: s.key, action: 'sync', phone: 'Admin', entries: [mk('p2', { type: 'production', product: 'Y111', batches: 1, time: '13:00', lines: [{ material: 'S2', qty: 1, unit: 'kg' }] })] });
+hourlyCheck();
+check('no repeat email while still low', __mail.length === mailBefore + 1, __mail.length - mailBefore);
+post({ key: s.key, action: 'sync', phone: 'Admin', entries: [mk('st3', { type: 'stock', move: 'in', material: 'S2', qty: 50, unit: 'kg', time: '14:00', lines: [{ material: 'S2', qty: 50, unit: 'kg' }] })] });
+check('back above the alert level after a delivery', stockOf(stockNow_(), 'S2').left === 104 && !stockOf(stockNow_(), 'S2').low && sRow('S2')[9] === 'OK');
+post({ key: s.key, action: 'sync', phone: 'Admin', entries: [mk('p3', { type: 'production', product: 'Y111', batches: 1, time: '15:00', lines: [{ material: 'S2', qty: 50, unit: 'kg' }] })] });
+check('falling low again emails again', __mail.length === mailBefore + 2, __mail.length - mailBefore);
+var del3 = Object.assign({}, st[4], { status: 'deleted', updatedAt: '2026-11-03T04:00:00.000Z' });
+post({ key: s.key, action: 'sync', phone: 'Admin', entries: [del3] });
+check('deleting a stock entry undoes it', stockOf(stockNow_(), 'S2').left === 59, stockOf(stockNow_(), 'S2').left);
+
+// stock + report actions, daily email
+var stockRes = post({ key: s.key, action: 'stock' });
+check('stock action', stockRes.ok && stockOf(stockRes.stock, 'S2').left === 59 && stockRes.today === today, stockRes);
+var repRes = post({ key: s.key, action: 'report', day: today });
+check('report action includes stock', repRes.ok && stockOf(repRes.stock, 'S2').left === 59);
+sendReportNow();
+var daily = __mail[__mail.length - 1];
+check('daily email has the stock section', daily.htmlBody.indexOf('Raw material stock') >= 0 && daily.htmlBody.indexOf('59 kg') >= 0 && daily.body.indexOf('== Raw material stock') >= 0, daily.body);
+check('daily email warns about low stock at the top', daily.htmlBody.indexOf('Low stock: S2') >= 0 && daily.htmlBody.indexOf('Low stock: S2') < daily.htmlBody.indexOf('Raw material stock'));
+var clr = post({ key: s.key, action: 'setLowStock', material: 'S2', value: '' });
+check('alert level cleared', clr.ok && stockOf(clr.config.materials, 'S2').lowStock === 0 && !stockOf(clr.stock, 'S2').low && sheet('Materials').getRange(8, 9).getValue() === '');
+setup();
+check('setup keeps stock tab + alert column', sheet('Stock') && sRow('S2')[7] === 59 && sheet('Materials').getRange(1, 9).getValue() === 'Low stock alert');
+
 console.log(__fails ? ('\n' + __fails + ' FAILED') : '\nALL PASSED');

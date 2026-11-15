@@ -30,6 +30,7 @@ const CORE = [
   './js/screens/log.js',
   './js/screens/report-view.js',
   './js/screens/settings.js',
+  './js/screens/stock.js',
   './icons/app-192.png',
   './icons/admin-192.png',
   './icons/favicon-64.png',

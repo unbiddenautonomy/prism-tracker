@@ -5,6 +5,8 @@ A simple phone app for the factory floor that records two things:
 - **Batches made**: pick a product and the number of batches. The app works out the raw materials used from the recipe.
 - **Waste / Spill**: what was lost (a raw material or a spoiled batch), how much, and why.
 
+The **Prism Admin** app also keeps **raw material stock**: the admin adds deliveries and removals, the app subtracts what batches used and what was wasted, and warns (in the app and by email) when a material falls below its alert level.
+
 Entries are saved on the phone first, so the app works without internet. They're sent to a **Google Sheet** that acts as the shared database. Google sends you a **daily email** with today's and this month's totals from every phone. Screens are in **English and Hindi**.
 
 ## Try it on this Mac (nothing to install)

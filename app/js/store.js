@@ -7,6 +7,7 @@ const KEYS = {
   entries: 'prism.entries.v1',
   settings: 'prism.settings.v1',
   sheetConfig: 'prism.sheetConfig.v1',
+  stock: 'prism.stock.v1',
 };
 const KEEP_SENT_DAYS = 62; // entries already in the sheet are kept on the phone this long
 
@@ -91,10 +92,23 @@ export function setSheetConfig(raw) {
 export function clearSheetConfig() {
   sheetCfg = null;
   try {
+    localStorage.removeItem(KEYS.stock);
     localStorage.removeItem(KEYS.sheetConfig);
   } catch (e) {
     /* ignore */
   }
+}
+
+// ---- Stock (admin) ----
+// The last stock numbers from the sheet, so the admin app can show them offline.
+
+export function getStockCache() {
+  const c = read(KEYS.stock, null);
+  return c && Array.isArray(c.stock) ? c : null;
+}
+
+export function setStockCache(stock, date) {
+  write(KEYS.stock, { stock, date, at: new Date().toISOString() });
 }
 
 // ---- Settings ----

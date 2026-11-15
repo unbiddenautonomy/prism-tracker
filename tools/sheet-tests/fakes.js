@@ -52,6 +52,13 @@ FakeRange.prototype.setNumberFormat = function (f) {
   }
   return this;
 };
+FakeRange.prototype.clearContent = function () {
+  for (var r = 0; r < this.nr; r++) {
+    var rowArr = this.sheet.data[this.row - 1 + r];
+    if (rowArr) for (var c = 0; c < this.nc; c++) rowArr[this.col - 1 + c] = '';
+  }
+  return this;
+};
 FakeRange.prototype.setFontWeight = function () { return this; };
 FakeRange.prototype.setBackground = function () { return this; };
 

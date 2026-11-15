@@ -270,6 +270,8 @@ function normalizeConfig(raw) {
         name_hi: str(m.name_hi),
         unit: str(m.unit) || 'kg',
         color: cleanColor(m.color) || auto,
+        // Low stock alert: warn when the stock left falls below this (0 = no alert).
+        lowStock: Number(m.lowStock) > 0 ? round3(m.lowStock) : 0,
         containers: (Array.isArray(m.containers) ? m.containers : [])
           .map((k) => ({ name: str(k.name), name_hi: str(k.name_hi), size: Number(k.size) || 0 }))
           .filter((k) => k.name && k.size > 0),
@@ -396,6 +398,19 @@ const REPORT_TEXT = {
     warnings: 'Problems in the Recipes sheet',
     openSheet: 'Open the Google Sheet',
     footer: 'Sent automatically by the Prism tracker.',
+    stock: 'Raw material stock',
+    stockEnd: 'end of {date}',
+    stockIn: 'In',
+    stockOut: 'Out',
+    stockLeft: 'Left',
+    stockAlert: 'Alert below',
+    stockLow: 'LOW',
+    stockNotTracked: 'not counted yet',
+    stockNone: 'No stock has been added yet. Add it in the Prism Admin app (Stock).',
+    stockOutNote: 'Out = used in batches + wasted + removed.',
+    lowStock: 'Low stock',
+    lowLine: '{left} left, alert below {alert}',
+    lowAction: 'Add stock in the Prism Admin app when new material arrives.',
   },
   hi: {
     title: '\u0926\u0948\u0928\u093f\u0915 \u0930\u093f\u092a\u094b\u0930\u094d\u091f',
@@ -437,6 +452,19 @@ const REPORT_TEXT = {
     warnings: '\u0930\u0947\u0938\u093f\u092a\u0940 \u0936\u0940\u091f \u092e\u0947\u0902 \u0917\u0932\u0924\u093f\u092f\u093e\u0901',
     openSheet: '\u0917\u0942\u0917\u0932 \u0936\u0940\u091f \u0916\u094b\u0932\u0947\u0902',
     footer: 'Prism \u091f\u094d\u0930\u0948\u0915\u0930 \u0938\u0947 \u0905\u092a\u0928\u0947-\u0906\u092a \u092d\u0947\u091c\u093e \u0917\u092f\u093e\u0964',
+    stock: '\u0915\u091a\u094d\u091a\u0947 \u092e\u093e\u0932 \u0915\u093e \u0938\u094d\u091f\u0949\u0915',
+    stockEnd: '{date} \u0915\u0947 \u0905\u0902\u0924 \u092e\u0947\u0902',
+    stockIn: '\u0906\u092f\u093e',
+    stockOut: '\u0917\u092f\u093e',
+    stockLeft: '\u092c\u091a\u093e',
+    stockAlert: '\u091a\u0947\u0924\u093e\u0935\u0928\u0940 \u0907\u0938\u0938\u0947 \u0915\u092e \u092a\u0930',
+    stockLow: '\u0915\u092e',
+    stockNotTracked: '\u0905\u092d\u0940 \u0917\u093f\u0928\u093e \u0928\u0939\u0940\u0902',
+    stockNone: '\u0905\u092d\u0940 \u0915\u094b\u0908 \u0938\u094d\u091f\u0949\u0915 \u0928\u0939\u0940\u0902 \u091c\u094b\u0921\u093c\u093e \u0917\u092f\u093e\u0964 Prism Admin \u0910\u092a \u092e\u0947\u0902 (\u0938\u094d\u091f\u0949\u0915) \u091c\u094b\u0921\u093c\u0947\u0902\u0964',
+    stockOutNote: '\u0917\u092f\u093e = \u092c\u0948\u091a \u092e\u0947\u0902 \u0932\u0917\u093e + \u092c\u0930\u094d\u092c\u093e\u0926 + \u0918\u091f\u093e\u092f\u093e\u0964',
+    lowStock: '\u0938\u094d\u091f\u0949\u0915 \u0915\u092e \u0939\u0948',
+    lowLine: '{left} \u092c\u091a\u093e, \u091a\u0947\u0924\u093e\u0935\u0928\u0940 {alert} \u0938\u0947 \u0915\u092e \u092a\u0930',
+    lowAction: '\u0928\u092f\u093e \u092e\u093e\u0932 \u0906\u0928\u0947 \u092a\u0930 Prism Admin \u0910\u092a \u092e\u0947\u0902 \u0938\u094d\u091f\u0949\u0915 \u091c\u094b\u0921\u093c\u0947\u0902\u0964',
   },
 };
 
@@ -476,7 +504,107 @@ function buildReportModel(opts) {
     series,
     phones,
     warnings: config.warnings || [],
+    stock: Array.isArray(opts.stock) ? opts.stock : null,
   };
+}
+
+// ---- Raw material stock ----
+// Stock left = added - removed - used in batches - wasted.
+// A material is counted from its first "stock" entry onward, so batches made
+// before anyone added stock don't push it below zero.
+
+function entryKey(e) {
+  return String(e.date) + ' ' + (String(e.time || '') || '00:00');
+}
+
+function stockRow(code, unit, color, lowStock) {
+  return {
+    code,
+    unit: unit || '',
+    color: color || '',
+    lowStock: Number(lowStock) > 0 ? round3(lowStock) : 0,
+    tracked: false,
+    since: '',
+    added: 0,
+    removed: 0,
+    used: 0,
+    wasted: 0,
+    left: 0,
+    low: false,
+    day: { added: 0, removed: 0, used: 0, wasted: 0 },
+  };
+}
+
+function stockField(e) {
+  if (e.type === 'stock') return e.move === 'out' ? 'removed' : 'added';
+  if (e.type === 'production') return 'used';
+  if (e.type === 'waste') return 'wasted';
+  return '';
+}
+
+// Recomputes left / low after the totals change.
+function finishStockRow(r) {
+  r.left = round3(r.added - r.removed - r.used - r.wasted);
+  r.low = r.tracked && r.lowStock > 0 && r.left < r.lowStock;
+  return r;
+}
+
+// entries: every entry ever (any phone). date: stock at the end of this day ('YYYY-MM-DD').
+// Returns one row per raw material, in the order of the Materials list.
+function computeStock(entries, config, date) {
+  const mats = (config && config.materials) || [];
+  const live = (entries || []).filter(
+    (e) => e && e.status !== 'deleted' && /^\d{4}-\d{2}-\d{2}$/.test(String(e.date)) && (!date || e.date <= date)
+  );
+  const start = {};
+  live.forEach((e) => {
+    if (e.type !== 'stock') return;
+    const k = entryKey(e);
+    (Array.isArray(e.lines) ? e.lines : []).forEach((l) => {
+      if (l && l.material && (!(l.material in start) || k < start[l.material])) start[l.material] = k;
+    });
+  });
+  const rows = {};
+  const order = [];
+  mats.forEach((m) => {
+    rows[m.code] = stockRow(m.code, m.unit, m.color, m.lowStock);
+    order.push(m.code);
+  });
+  live.forEach((e) => {
+    const field = stockField(e);
+    if (!field) return;
+    const k = entryKey(e);
+    (Array.isArray(e.lines) ? e.lines : []).forEach((l) => {
+      if (!l || !l.material || !(l.material in start) || k < start[l.material]) return;
+      let r = rows[l.material];
+      if (!r) {
+        r = rows[l.material] = stockRow(l.material, l.unit, materialColor(config, l.material), 0);
+        order.push(l.material);
+      }
+      const q = Number(l.qty) || 0;
+      r[field] = round3(r[field] + q);
+      if (e.date === date) r.day[field] = round3(r.day[field] + q);
+    });
+  });
+  return order.map((code) => {
+    const r = rows[code];
+    r.tracked = code in start;
+    r.since = r.tracked ? start[code].slice(0, 10) : '';
+    return finishStockRow(r);
+  });
+}
+
+function lowStockRows(stock) {
+  return (stock || []).filter((r) => r.low);
+}
+
+// "12 kg"
+function qtyUnit(v, unit) {
+  return fmtNum(v) + (unit ? ' ' + unit : '');
+}
+
+function lowLineText(r, L) {
+  return L.lowLine.replace('{left}', qtyUnit(r.left, r.unit)).replace('{alert}', qtyUnit(r.lowStock, r.unit));
 }
 
 function summarizePeriod(list, config) {
@@ -497,6 +625,7 @@ function summarizePeriod(list, config) {
     m[field] = round3(m[field] + (Number(l.qty) || 0));
     m.total = round3(m.used + m.wasted);
   };
+  list = list.filter((e) => e.type === 'production' || e.type === 'waste');
   list.forEach((e) => {
     const w = e.worker || '?';
     const wk = workers[w] || (workers[w] = { worker: w, batches: 0, prodEntries: 0, wasteEntries: 0 });
@@ -660,6 +789,65 @@ function periodHtml(p, L, lang, isToday) {
   return s;
 }
 
+// Stock table with a bar per material. The bar is scaled to the biggest amount;
+// the thin dark mark on it is the alert level.
+function stockHtml(stock, L) {
+  const tracked = stock.filter((r) => r.tracked);
+  if (!tracked.length) return '<p style="' + RS.muted + '">' + escapeHtml(L.stockNone) + '</p>';
+  const max = Math.max(1, ...tracked.map((r) => Math.max(r.left, r.lowStock)));
+  let s = '<table style="' + RS.table + '"><tr>';
+  [[L.material, 0], [L.stockIn, 1], [L.stockOut, 1], [L.stockLeft, 1], ['', 0], [L.stockAlert, 1]].forEach((hd) => {
+    s += '<th style="' + (hd[1] ? RS.thR : RS.th) + '">' + escapeHtml(hd[0]) + '</th>';
+  });
+  s += '</tr>';
+  stock.forEach((r) => {
+    const out = round3(r.day.used + r.day.wasted + r.day.removed);
+    const cell = (v, st) => '<td style="' + st + '">' + escapeHtml(v) + '</td>';
+    const lowSt = r.low ? 'background:#fef2f2;' : '';
+    s += '<tr>';
+    s += '<td style="' + RS.td + lowSt + '"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;border:1px solid #94a3b8;background:' +
+      escapeHtml(r.color || '#64748b') + ';margin-right:6px;"></span><b>' + escapeHtml(r.code) + '</b>' +
+      (r.low ? ' <span style="color:#b91c1c;font-weight:bold;">' + escapeHtml(L.stockLow) + '</span>' : '') + '</td>';
+    if (!r.tracked) {
+      s += '<td colspan="5" style="' + RS.td + 'color:#9ca3af;">' + escapeHtml(L.stockNotTracked) + '</td></tr>';
+      return;
+    }
+    s += cell(r.day.added ? '+' + qtyUnit(r.day.added, r.unit) : '0', r.day.added ? RS.tdR : RS.tdZero);
+    s += cell(out ? '\u2212' + qtyUnit(out, r.unit) : '0', out ? RS.tdR : RS.tdZero);
+    s += '<td style="' + RS.tdR + lowSt + (r.low ? 'color:#b91c1c;' : '') + '"><b>' + escapeHtml(qtyUnit(r.left, r.unit)) + '</b></td>';
+    const pct = Math.max(0, Math.min(100, (Math.max(0, r.left) / max) * 100));
+    const mark = r.lowStock ? Math.min(100, (r.lowStock / max) * 100) : -1;
+    s += '<td style="' + RS.td + 'width:34%;"><div style="position:relative;height:12px;background:#eef2f7;border-radius:6px;">' +
+      '<div style="width:' + pct.toFixed(1) + '%;height:12px;border-radius:6px;background:' + (r.low ? '#dc2626' : '#16a34a') + ';"></div>' +
+      (mark >= 0 ? '<div style="position:absolute;top:-3px;left:' + mark.toFixed(1) + '%;width:2px;height:18px;background:#111827;"></div>' : '') +
+      '</div></td>';
+    s += cell(r.lowStock ? qtyUnit(r.lowStock, r.unit) : '\u2013', r.lowStock ? RS.tdR : RS.tdZero);
+    s += '</tr>';
+  });
+  s += '</table>';
+  return s + '<p style="' + RS.muted + 'margin:4px 0 0;">' + escapeHtml(L.stockOutNote) + '</p>';
+}
+
+// The email sent the moment a raw material falls below its alert level.
+function renderLowStockHtml(rows, appName, sheetUrl) {
+  const L = REPORT_TEXT.en;
+  let s = '<div style="' + RS.wrap + '">';
+  s += '<h1 style="' + RS.h1 + 'color:#b91c1c;">' + escapeHtml(appName + ' \u2013 ' + L.lowStock) + '</h1>';
+  s += tableHtml(
+    [L.material, L.stockLeft, L.stockAlert],
+    rows.map((r) => [r.code, qtyUnit(r.left, r.unit), qtyUnit(r.lowStock, r.unit)]),
+    [1, 2]
+  );
+  s += '<p>' + escapeHtml(L.lowAction) + '</p>';
+  if (sheetUrl) s += '<p><a href="' + escapeHtml(sheetUrl) + '">' + escapeHtml(L.openSheet) + '</a></p>';
+  return s + '<p style="' + RS.muted + '">' + escapeHtml(L.footer) + '</p></div>';
+}
+
+function renderLowStockText(rows, appName) {
+  const L = REPORT_TEXT.en;
+  return [appName + ' \u2013 ' + L.lowStock, ''].concat(rows.map((r) => r.code + ': ' + lowLineText(r, L)), ['', L.lowAction]).join('\n');
+}
+
 function renderReportHtml(model, lang) {
   const L = REPORT_TEXT[lang] || REPORT_TEXT.en;
   const day = Number(model.date.slice(8, 10));
@@ -690,8 +878,16 @@ function renderReportHtml(model, lang) {
   });
   s += '</tr></table>';
 
+  lowStockRows(model.stock).forEach((r) => {
+    s += '<div style="' + RS.warn + '">\u26a0\ufe0f <b>' + escapeHtml(L.lowStock) + ': ' + escapeHtml(r.code) + '</b> \u2013 ' + escapeHtml(lowLineText(r, L)) + '</div>';
+  });
+
   s += '<h2 style="' + RS.h2 + '">' + escapeHtml(L.today + ' \u00b7 ' + shortDate(model.date, lang)) + '</h2>';
   s += periodHtml(model.today, L, lang, true);
+  if (model.stock) {
+    s += '<h2 style="' + RS.h2 + '">' + escapeHtml(L.stock + ' \u00b7 ' + L.stockEnd.replace('{date}', shortDate(model.date, lang))) + '</h2>';
+    s += stockHtml(model.stock, L);
+  }
   s += '<h2 style="' + RS.h2 + '">' + escapeHtml(L.month + ' \u00b7 ' + monthRange) + '</h2>';
   s += periodHtml(model.month, L, lang, false);
 
@@ -735,7 +931,16 @@ function renderReportText(model, lang) {
     }
     out.push('');
   };
+  lowStockRows(model.stock).forEach((r) => out.push('! ' + L.lowStock + ': ' + r.code + ' \u2013 ' + lowLineText(r, L)));
+  if (lowStockRows(model.stock).length) out.push('');
   period(L.today, model.today, true);
+  if (model.stock) {
+    out.push('== ' + L.stock + ' (' + L.stockEnd.replace('{date}', shortDate(model.date, lang)) + ') ==');
+    const tracked = model.stock.filter((r) => r.tracked);
+    if (!tracked.length) out.push('  ' + L.stockNone);
+    tracked.forEach((r) => out.push('  ' + r.code + ': ' + qtyUnit(r.left, r.unit) + (r.lowStock ? ' (' + L.stockAlert.toLowerCase() + ' ' + qtyUnit(r.lowStock, r.unit) + ')' : '') + (r.low ? ' ' + L.stockLow : '')));
+    out.push('');
+  }
   period(L.month, model.month, false);
   model.phones.filter((p) => !p.sentToday).forEach((p) => out.push('! ' + p.phone + ': ' + L.notToday));
   return out.join('\n');
@@ -748,7 +953,7 @@ function renderReportText(model, lang) {
 // and sends the daily email. Functions ending in "_" are internal.
 // ===================================================================
 
-const PRISM_VERSION = '0.1.0';
+const PRISM_VERSION = '0.2.0';
 
 const TAB = {
   materials: 'Materials',
@@ -759,6 +964,7 @@ const TAB = {
   use: 'Material Use',
   phones: 'Phones',
   categories: 'Categories',
+  stock: 'Stock',
 };
 
 // [field, column header]. Phones write by position, so keep this order.
@@ -786,7 +992,11 @@ const ENTRY_COLS = [
 const ENTRY_TEXT_FIELDS = ['date', 'time', 'id', 'createdAt', 'updatedAt', 'linesJson', 'entered', 'note', 'product', 'worker', 'phone'];
 const USE_HEADERS = ['Date', 'Type', 'Material', 'Qty', 'Unit', 'Product', 'Reason', 'Worker', 'Phone', 'Entry ID'];
 const PHONE_HEADERS = ['Phone', 'Last sync', 'Worker', 'App version'];
-const MATERIAL_HEADERS = ['Code', 'Name', 'Name (Hindi)', 'Unit', 'Container', 'Container (Hindi)', 'Container size', 'Color'];
+const MATERIAL_HEADERS = ['Code', 'Name', 'Name (Hindi)', 'Unit', 'Container', 'Container (Hindi)', 'Container size', 'Color', 'Low stock alert'];
+const LOW_STOCK_COL = 9; // Materials column with the alert level
+const STOCK_HEADERS = ['Material', 'Unit', 'Counted since', 'Added', 'Removed', 'Used in batches', 'Wasted', 'Left', 'Alert below', 'Status', 'Updated'];
+// Entries "Type" column for each kind of entry.
+const TYPE_LABELS = { production: 'Production', waste: 'Waste', stockin: 'Stock in', stockout: 'Stock out' };
 // Recipes: these columns are found by their header; every other header is a raw material code.
 const RECIPE_FIXED = ['Product', 'Product (Hindi)', 'Batch note', 'Batch note (Hindi)', 'Category', 'Color'];
 const CATEGORY_HEADERS = ['Category', 'Color'];
@@ -918,6 +1128,8 @@ function readConfig_() {
       if (!code) return;
       const size = num(r[6]);
       const color = str_(r[7]);
+      const low = r[8] === '' || r[8] == null ? 0 : Number(r[8]);
+      if (isNaN(low) || low < 0) warnings.push('Materials "' + code + '": low stock alert "' + r[8] + '" is not a number.');
       if (color && !cleanColor(color)) warnings.push('Materials "' + code + '": color "' + color + '" should look like #00F5A0.');
       materials.push({
         code,
@@ -925,6 +1137,7 @@ function readConfig_() {
         name_hi: str_(r[2]),
         unit: str_(r[3]) || 'kg',
         color: cleanColor(color),
+        lowStock: low > 0 ? low : 0,
         containers: size > 0 ? [{ name: str_(r[4]) || 'Container', name_hi: str_(r[5]), size }] : [],
       });
     });
@@ -1006,7 +1219,7 @@ function cleanEntry_(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const id = String(raw.id || '').slice(0, 64);
   if (!id) return null;
-  const type = raw.type === 'waste' ? 'waste' : 'production';
+  const type = raw.type === 'waste' || raw.type === 'stock' ? raw.type : 'production';
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(raw.date)) ? String(raw.date) : todayText_();
   const s = (v, max) => String(v == null ? '' : v).slice(0, max || 200);
   const n = (v) => (v === '' || v == null || isNaN(Number(v)) ? '' : Number(v));
@@ -1026,6 +1239,7 @@ function cleanEntry_(raw) {
     unit: s(raw.unit, 10),
     entered: s(raw.entered, 80),
     reason: type === 'waste' ? s(raw.reason, 20) : '',
+    move: type === 'stock' ? (raw.move === 'out' ? 'out' : 'in') : '',
     note: s(raw.note, 300),
     worker: s(raw.worker, 60),
     phone: s(raw.phone, 60),
@@ -1036,11 +1250,16 @@ function cleanEntry_(raw) {
   };
 }
 
+function typeLabel_(e) {
+  if (e.type === 'stock') return e.move === 'out' ? TYPE_LABELS.stockout : TYPE_LABELS.stockin;
+  return e.type === 'waste' ? TYPE_LABELS.waste : TYPE_LABELS.production;
+}
+
 function entryToRow_(e) {
   const v = {
     date: e.date,
     time: e.time,
-    type: e.type === 'waste' ? 'Waste' : 'Production',
+    type: typeLabel_(e),
     product: e.product,
     batches: e.batches,
     material: e.material,
@@ -1069,7 +1288,8 @@ function rowToEntry_(r) {
   } catch (e) {
     lines = [];
   }
-  const type = String(get('type')).toLowerCase() === 'waste' ? 'waste' : 'production';
+  const label = String(get('type')).trim().toLowerCase();
+  const type = label === 'waste' ? 'waste' : label.indexOf('stock') === 0 ? 'stock' : 'production';
   const num = (v) => (v === '' || v == null ? null : Number(v));
   return {
     id: str_(get('id')),
@@ -1083,6 +1303,7 @@ function rowToEntry_(r) {
     unit: str_(get('unit')),
     entered: str_(get('entered')),
     reason: type === 'waste' ? reasonKeyFromLabel(get('reason')) : '',
+    move: type === 'stock' ? (label === 'stock out' ? 'out' : 'in') : '',
     note: str_(get('note')),
     worker: str_(get('worker')),
     phone: str_(get('phone')),
@@ -1093,7 +1314,7 @@ function rowToEntry_(r) {
 
 function useRowsFor_(e) {
   if (e.status !== 'ok') return [];
-  const type = e.type === 'waste' ? 'Waste' : 'Production';
+  const type = typeLabel_(e);
   const reason = e.type === 'waste' ? reasonByKey(e.reason).en : '';
   return e.lines.map((l) => [e.date, type, l.material, l.qty, l.unit, e.product, reason, e.worker, e.phone, e.id]);
 }
@@ -1157,16 +1378,104 @@ function upsertEntries_(rawEntries) {
   return saved;
 }
 
-function readEntries_(monthKey) {
+function readAllEntries_() {
   const sh = getSS_().getSheetByName(TAB.entries);
   if (!sh || sh.getLastRow() < 2) return [];
   const rows = sh.getRange(2, 1, sh.getLastRow() - 1, ENTRY_COLS.length).getValues();
-  const out = [];
-  rows.forEach((r) => {
-    const e = rowToEntry_(r);
-    if (e.id && e.date.slice(0, 7) === monthKey) out.push(e);
-  });
-  return out;
+  return rows.map(rowToEntry_).filter((e) => e.id);
+}
+
+function readEntries_(monthKey, all) {
+  return (all || readAllEntries_()).filter((e) => e.date.slice(0, 7) === monthKey);
+}
+
+// ---------------- stock ----------------
+
+// Colors filled in the same way as on the phones.
+function stockFor_(all, config, day) {
+  return computeStock(all, normalizeConfig(config), day);
+}
+
+function stockNow_(all, config) {
+  return stockFor_(all || readAllEntries_(), config || readConfig_(), todayText_());
+}
+
+// Writes the Stock tab: one row per raw material, refreshed after every sync.
+function writeStockTab_(stock) {
+  const ss = getSS_();
+  const sh = ensureSheet_(ss, TAB.stock, STOCK_HEADERS);
+  const stamp = nowText_();
+  const rows = stock.map((r) => [
+    r.code,
+    r.unit,
+    r.since || 'not counted yet',
+    r.tracked ? r.added : '',
+    r.tracked ? r.removed : '',
+    r.tracked ? r.used : '',
+    r.tracked ? r.wasted : '',
+    r.tracked ? r.left : '',
+    r.lowStock || '',
+    !r.tracked ? '' : r.low ? 'LOW' : 'OK',
+    stamp,
+  ]);
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, STOCK_HEADERS.length).clearContent();
+  writeRows_(sh, 2, rows, [1, 3, 11]);
+}
+
+// Refreshes the Stock tab and emails once when a material falls below its alert
+// level. It emails again only after that material has been back above it.
+function checkStock_(all) {
+  const config = readConfig_();
+  const stock = stockNow_(all, config);
+  writeStockTab_(stock);
+  const props = PropertiesService.getScriptProperties();
+  let alerted = {};
+  try {
+    alerted = JSON.parse(props.getProperty('LOW_ALERTED') || '{}') || {};
+  } catch (e) {
+    alerted = {};
+  }
+  const low = lowStockRows(stock);
+  const fresh = low.filter((r) => !alerted[r.code]);
+  const next = {};
+  low.forEach((r) => (next[r.code] = true));
+  if (fresh.length) {
+    const s = readSettings_();
+    MailApp.sendEmail({
+      to: s.email || Session.getEffectiveUser().getEmail(),
+      subject: config.appName + ': low stock \u2013 ' + fresh.map((r) => r.code).join(', '),
+      htmlBody: renderLowStockHtml(low, config.appName, getSS_().getUrl()),
+      body: renderLowStockText(low, config.appName),
+      name: config.appName + ' tracker',
+    });
+  }
+  props.setProperty('LOW_ALERTED', JSON.stringify(next));
+  return { stock, emailed: fresh.map((r) => r.code) };
+}
+
+// The admin app sets a material's alert level (empty = no alert).
+function setLowStock_(req) {
+  const code = String(req.material || '').trim();
+  const raw = req.value === '' || req.value == null ? '' : Number(req.value);
+  if (raw !== '' && (isNaN(raw) || raw < 0)) return { ok: false, error: 'bad-number' };
+  const sh = getSS_().getSheetByName(TAB.materials);
+  const last = sh ? sh.getLastRow() : 0;
+  if (last < 2) return { ok: false, error: 'unknown-material' };
+  const codes = sh.getRange(2, 1, last - 1, 1).getValues();
+  for (let i = 0; i < codes.length; i++) {
+    if (str_(codes[i][0]) === code) {
+      ensureLowStockHeader_(sh);
+      sh.getRange(i + 2, LOW_STOCK_COL).setValue(raw === 0 ? '' : raw);
+      return { ok: true, config: readConfig_() };
+    }
+  }
+  return { ok: false, error: 'unknown-material' };
+}
+
+// Sheets made before stock tracking have no alert column yet.
+function ensureLowStockHeader_(sh) {
+  const cell = sh.getRange(1, LOW_STOCK_COL);
+  if (!str_(cell.getValue())) cell.setValue(MATERIAL_HEADERS[LOW_STOCK_COL - 1]).setFontWeight('bold').setBackground('#e2e8f0');
 }
 
 function touchPhone_(phone, worker, version) {
@@ -1218,7 +1527,24 @@ function doPost(e) {
       out = handleSync_(req);
     } else if (req.action === 'report') {
       const day = /^\d{4}-\d{2}-\d{2}$/.test(String(req.day)) ? String(req.day) : todayText_();
-      out = { ok: true, entries: readEntries_(day.slice(0, 7)), phones: readPhones_(), config: readConfig_(), today: todayText_() };
+      const all = readAllEntries_();
+      const config = readConfig_();
+      out = { ok: true, entries: readEntries_(day.slice(0, 7), all), phones: readPhones_(), config, stock: stockFor_(all, config, day), today: todayText_() };
+    } else if (req.action === 'stock') {
+      const config = readConfig_();
+      out = { ok: true, stock: stockNow_(null, config), config, today: todayText_() };
+    } else if (req.action === 'setLowStock') {
+      const lock = LockService.getScriptLock();
+      if (!lock.tryLock(25000)) return json_({ ok: false, error: 'busy' });
+      try {
+        out = setLowStock_(req);
+        if (out.ok) {
+          out.stock = checkStock_().stock;
+          out.today = todayText_();
+        }
+      } finally {
+        lock.releaseLock();
+      }
     } else {
       out = { ok: false, error: 'unknown-action' };
     }
@@ -1236,6 +1562,14 @@ function handleSync_(req) {
   try {
     saved = upsertEntries_(entries);
     if (req.phone) touchPhone_(req.phone, req.worker, req.appVersion);
+    if (entries.length) {
+      try {
+        checkStock_();
+      } catch (err) {
+        // Never let the stock check stop entries from being saved.
+        Logger.log('Stock check failed: ' + err);
+      }
+    }
   } finally {
     lock.releaseLock();
   }
@@ -1251,6 +1585,11 @@ function hourlyCheck() {
   const tz = tz_();
   const hour = Number(Utilities.formatDate(now, tz, 'H'));
   const today = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+  try {
+    checkStock_();
+  } catch (err) {
+    Logger.log('Stock check failed: ' + err);
+  }
   if (hour < s.hour || s.lastSent === today) return;
   sendReport_(today);
   setSetting_('Last report sent', today);
@@ -1260,8 +1599,10 @@ function sendReport_(day) {
   const s = readSettings_();
   const ss = getSS_();
   const config = readConfig_();
+  const all = readAllEntries_();
   const model = buildReportModel({
-    entries: readEntries_(day.slice(0, 7)),
+    entries: readEntries_(day.slice(0, 7), all),
+    stock: stockFor_(all, config, day),
     config,
     date: day,
     phones: readPhones_(),
@@ -1400,10 +1741,11 @@ function setup() {
   if (mSh.getLastRow() < 2) {
     const rows = seed.materials.map((m) => {
       const c = (m.containers || [])[0] || {};
-      return [m.code, m.name || m.code, m.name_hi || '', m.unit || 'kg', c.name || '', c.name_hi || '', c.size || '', m.color || ''];
+      return [m.code, m.name || m.code, m.name_hi || '', m.unit || 'kg', c.name || '', c.name_hi || '', c.size || '', m.color || '', m.lowStock || ''];
     });
     writeRows_(mSh, 2, rows, [1, 8]);
   }
+  ensureLowStockHeader_(mSh);
 
   const rSh = ensureSheet_(ss, TAB.recipes, RECIPE_FIXED.concat(codes));
   if (rSh.getLastRow() < 2) {
@@ -1437,6 +1779,7 @@ function setup() {
   ensureSheet_(ss, TAB.entries, ENTRY_COLS.map((c) => c[1]));
   ensureSheet_(ss, TAB.use, USE_HEADERS);
   ensureSheet_(ss, TAB.phones, PHONE_HEADERS);
+  ensureSheet_(ss, TAB.stock, STOCK_HEADERS);
 
   const blank = ss.getSheetByName('Sheet1');
   if (blank && blank.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(blank);
@@ -1447,6 +1790,7 @@ function setup() {
   ScriptApp.newTrigger('hourlyCheck').timeBased().everyHours(1).create();
 
   const fixedCells = repairText_(ss);
+  checkStock_();
 
   const s = readSettings_();
   const msg =

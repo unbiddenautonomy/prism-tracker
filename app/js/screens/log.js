@@ -11,6 +11,7 @@ import { openWasteFromEntry } from './waste.js';
 
 function entryCard(e, cfg) {
   const isWaste = e.type === 'waste';
+  const isStock = e.type === 'stock';
   const today = localYmd();
   const color = e.material ? materialColor(cfg, e.material) : productColor(cfg, e.product);
   const del = async () => {
@@ -34,7 +35,7 @@ function entryCard(e, cfg) {
     h(
       'div',
       { class: 'entry-top' },
-      h('span', { class: 'entry-type', style: { color: isWaste ? 'var(--amber)' : 'var(--emerald)' } }, icon(isWaste ? 'drop' : 'flask', 16)),
+      h('span', { class: 'entry-type', style: { color: isStock ? 'var(--blue)' : isWaste ? 'var(--amber)' : 'var(--emerald)' } }, icon(isStock ? 'stack' : isWaste ? 'drop' : 'flask', 16)),
       h('span', { class: 'num' }, e.time, e.date !== today ? ' · ' + t('forDate', { date: shortDate(e.date, getLang()) }) : ''),
       h('span', { class: 'entry-worker' }, e.worker)
     ),
@@ -45,7 +46,8 @@ function entryCard(e, cfg) {
     h(
       'div',
       { class: 'entry-actions' },
-      h('button', { class: 'btn', onclick: change }, icon('edit', 16), t('change')),
+      // A stock change is fixed by deleting it and adding it again on the Stock screen.
+      isStock ? null : h('button', { class: 'btn', onclick: change }, icon('edit', 16), t('change')),
       h('button', { class: 'btn btn-danger-outline', onclick: del }, icon('trash', 16), t('delete'))
     )
   );

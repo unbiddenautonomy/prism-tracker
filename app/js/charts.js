@@ -48,6 +48,24 @@ export function bar(value, max, color) {
   return wrap;
 }
 
+// Stock left, scaled to the biggest row, with a tick at the alert level.
+// Green when fine, red when low (not the material's own color: R materials are red already).
+export function stockBar(left, alert, max, color, low) {
+  const wrap = document.createElement('div');
+  wrap.className = 'stock-bar' + (low ? ' is-low' : '');
+  const fill = document.createElement('span');
+  fill.className = 'stock-fill';
+  fill.style.width = (max > 0 && left > 0 ? Math.max(2, Math.min(100, (left / max) * 100)) : 0) + '%';
+  wrap.append(fill);
+  if (alert > 0 && max > 0) {
+    const mark = document.createElement('span');
+    mark.className = 'stock-mark';
+    mark.style.left = Math.min(100, (alert / max) * 100) + '%';
+    wrap.append(mark);
+  }
+  return wrap;
+}
+
 // Used (solid) + wasted (striped) of one material, scaled to the biggest row.
 export function usedWastedBar(used, wasted, max, color) {
   const wrap = document.createElement('div');

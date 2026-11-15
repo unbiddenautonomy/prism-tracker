@@ -136,6 +136,8 @@ export function normalizeConfig(raw) {
         name_hi: str(m.name_hi),
         unit: str(m.unit) || 'kg',
         color: cleanColor(m.color) || auto,
+        // Low stock alert: warn when the stock left falls below this (0 = no alert).
+        lowStock: Number(m.lowStock) > 0 ? round3(m.lowStock) : 0,
         containers: (Array.isArray(m.containers) ? m.containers : [])
           .map((k) => ({ name: str(k.name), name_hi: str(k.name_hi), size: Number(k.size) || 0 }))
           .filter((k) => k.name && k.size > 0),

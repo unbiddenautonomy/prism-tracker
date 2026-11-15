@@ -72,6 +72,12 @@ Phones pick up the new version the next time they open the app with internet. If
 
 Reports now show every phone's entries. The daily email keeps coming from Google as before.
 
+**Raw material stock** (the button at the top of Prism Admin):
+1. Tap a material.
+2. Choose **Add stock** (a delivery arrived) or **Remove stock** (returned, given away, counted less).
+3. Enter the amount, in kg or in bags/drums, and tap the big button.
+4. Under **Low stock alert**, enter the amount at which you want a warning, then tap **Save alert**. This needs internet.
+
 Admins on Android can do the same in Chrome with the `/admin` link.
 
 ---

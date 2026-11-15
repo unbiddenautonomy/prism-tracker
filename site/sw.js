@@ -1,6 +1,6 @@
 // Offline support. Always tries the internet first (so updates show up straight away),
 // and falls back to the saved copy when there's no signal.
-const VERSION = 'prism-20261109-001256'; // tools/make_website.py stamps a new value for each upload
+const VERSION = 'prism-20261115-181237'; // tools/make_website.py stamps a new value for each upload
 // Pages use their clean addresses ('./' and './admin'); Cloudflare redirects the .html names,
 // and a saved redirect can't be used to open a page offline.
 const CORE = [
@@ -30,6 +30,7 @@ const CORE = [
   './js/screens/log.js',
   './js/screens/report-view.js',
   './js/screens/settings.js',
+  './js/screens/stock.js',
   './icons/app-192.png',
   './icons/admin-192.png',
   './icons/favicon-64.png',

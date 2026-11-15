@@ -15,7 +15,7 @@ Use the Google account that should **own the data and send the email**.
 
 1. In the Sheet: **Extensions → Apps Script**. A new tab opens with a file called `Code.gs`.
 2. Delete everything in that editor.
-3. On the Mac, open `google-sheet/Code.gs` from this folder. Right-click → Open With → TextEdit works. Select all (⌘A), copy (⌘C), and paste it into the Apps Script editor (⌘V).
+3. Open https://github.com/unbiddenautonomy/prism-tracker/blob/main/google-sheet/Code.gs and click **Copy raw file** (the two-squares button at the top right of the code). Paste it into the Apps Script editor (⌘V). Opening `google-sheet/Code.gs` from this folder in TextEdit works too.
 4. Click the **💾 Save** icon.
 
 ## 3. Run setup once
@@ -31,7 +31,7 @@ Back in the Sheet, you now have these tabs:
 
 | Tab | What it's for | Who edits it |
 |---|---|---|
-| **Materials** | The 9 raw materials (code, name, Hindi name, unit, optional container like "Bag = 25 kg", optional **Color**) | You |
+| **Materials** | The 9 raw materials (code, name, Hindi name, unit, optional container like "Bag = 25 kg", optional **Color**, optional **Low stock alert**) | You, or the admin app |
 | **Recipes** | One row per product, with optional **Category** and **Color**, then one column per raw material: the amount used in **ONE batch** | You |
 | **Categories** | Optional color per product category (e.g. Industrial Solvents = #FF9F00) | You |
 | **Workers** | Names shown on the phones' "Who are you?" screen | You |
@@ -39,6 +39,7 @@ Back in the Sheet, you now have these tabs:
 | **Entries** | Every entry from every phone (one row each) | The phones (don't edit) |
 | **Material Use** | One row per raw material used or wasted, ready for pivot tables | The phones (don't edit) |
 | **Phones** | When each phone last sent data | The phones (don't edit) |
+| **Stock** | What's left of each raw material, refreshed after every sync | The script (don't edit) |
 
 ## 4. Publish it so the phones can reach it
 
@@ -75,6 +76,20 @@ In the **Settings** tab:
 
 To test it now, use the **Prism** menu → **Send today's report now**.
 
+The email also has a **Raw material stock** section, once stock has been added in the admin app.
+
+## 7. Raw material stock and low stock alerts
+
+- **Adding or removing stock** is done in the **Prism Admin** app: tap **Raw material stock**, then a material.
+- **Stock left** = stock added − stock removed − used in batches − wasted.
+  - Each material is counted from its **first** stock entry. Enter everything you have in stock at that moment.
+- **Low stock alert:** set it per material in the admin app, or type a number in the **Low stock alert** column of **Materials**. Leave it empty for no alert.
+- **When a material falls below its alert level:**
+  - The **Report email** address gets an email straight away. It's sent once, and again only after the material has gone back above the level and fallen below it again.
+  - The admin app shows a red **Low stock** box.
+  - The daily email lists it at the top.
+- The **Stock** tab shows the same numbers, refreshed after every sync and every hour.
+
 ---
 
 ## Everyday use
@@ -89,6 +104,7 @@ To test it now, use the **Prism** menu → **Send today's report now**.
   1. Their own Color
   2. Their Category's color from the **Categories** tab
   3. An automatic neon color, if both are blank
+- **Fix wrong stock:** in the admin app, open the material and either delete the wrong change or add/remove the difference.
 - **Cancel a wrong entry from an earlier day:** in **Entries**, change its **Status** to `DELETED`. Reports and the email then ignore it. Also delete its rows in **Material Use**, which share the same Entry ID. Today's entries can be fixed on the phone itself.
 - **Don't rename, move or delete columns** in Entries, Material Use or Phones. If that happens, phones stop sending and show "Sheet problem" until it's fixed. Their entries wait safely on the phone in the meantime. Build your own summaries in new tabs instead.
 

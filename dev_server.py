@@ -41,6 +41,7 @@ def load_db():
         db = {}
     db.setdefault("entries", {})
     db.setdefault("phones", {})
+    db.setdefault("lowStock", {})
     return db
 
 
@@ -52,14 +53,68 @@ def save_db(db):
     os.replace(tmp, DB_PATH)
 
 
-def sheet_config():
+def sheet_config(db=None):
     """What the real sheet would return from its Materials/Recipes/Workers tabs.
     Put a dev-data/mock-config.json next to test "recipes changed in the sheet"."""
     path = MOCK_CONFIG_PATH if os.path.exists(MOCK_CONFIG_PATH) else os.path.join(APP_DIR, "config.json")
     with open(path, encoding="utf-8") as f:
         cfg = json.load(f)
     keep = ("appName", "ownerPin", "categoryColors", "materials", "products", "workers", "warnings")
-    return {k: cfg[k] for k in keep if k in cfg}
+    out = {k: cfg[k] for k in keep if k in cfg}
+    low = (db or load_db()).get("lowStock", {})
+    for m in out.get("materials", []):
+        m["lowStock"] = low.get(m.get("code"), 0)
+    return out
+
+
+def r3(v):
+    return round(float(v or 0) * 1000) / 1000
+
+
+def compute_stock(entries, cfg, date):
+    """Same rules as computeStock() in app/js/report.js: counted from each
+    material's first stock entry; left = added - removed - used - wasted."""
+    key = lambda e: str(e.get("date", "")) + " " + (str(e.get("time") or "") or "00:00")
+    live = [e for e in entries if e.get("status") != "deleted" and len(str(e.get("date", ""))) == 10 and str(e.get("date")) <= date]
+    start = {}
+    for e in live:
+        if e.get("type") == "stock":
+            for l in e.get("lines") or []:
+                code = l.get("material")
+                if code and (code not in start or key(e) < start[code]):
+                    start[code] = key(e)
+    rows, order = {}, []
+
+    def row(code, unit, low):
+        if code not in rows:
+            rows[code] = {"code": code, "unit": unit or "", "color": "", "lowStock": r3(low), "tracked": False, "since": "",
+                          "added": 0, "removed": 0, "used": 0, "wasted": 0, "left": 0, "low": False,
+                          "day": {"added": 0, "removed": 0, "used": 0, "wasted": 0}}
+            order.append(code)
+        return rows[code]
+
+    for m in cfg.get("materials", []):
+        row(m["code"], m.get("unit", "kg"), m.get("lowStock") or 0)
+    for e in live:
+        t = e.get("type")
+        field = ("removed" if e.get("move") == "out" else "added") if t == "stock" else {"production": "used", "waste": "wasted"}.get(t)
+        if not field:
+            continue
+        for l in e.get("lines") or []:
+            code = l.get("material")
+            if not code or code not in start or key(e) < start[code]:
+                continue
+            r = row(code, l.get("unit"), 0)
+            r[field] = r3(r[field] + r3(l.get("qty")))
+            if e.get("date") == date:
+                r["day"][field] = r3(r["day"][field] + r3(l.get("qty")))
+    for code in order:
+        r = rows[code]
+        r["tracked"] = code in start
+        r["since"] = start[code][:10] if r["tracked"] else ""
+        r["left"] = r3(r["added"] - r["removed"] - r["used"] - r["wasted"])
+        r["low"] = r["tracked"] and r["lowStock"] > 0 and r["left"] < r["lowStock"]
+    return [rows[c] for c in order]
 
 
 def handle_mock(req):
@@ -84,13 +139,41 @@ def handle_mock(req):
             if phone:
                 db["phones"][phone] = {"phone": phone, "lastSync": now_text(), "worker": req.get("worker", ""), "appVersion": req.get("appVersion", "")}
             save_db(db)
-        return {"ok": True, "saved": saved, "config": sheet_config(), "serverTime": datetime.datetime.utcnow().isoformat() + "Z"}
+        return {"ok": True, "saved": saved, "config": sheet_config(db), "serverTime": datetime.datetime.utcnow().isoformat() + "Z"}
     if action == "report":
         day = str(req.get("day") or datetime.date.today().isoformat())
         month = day[:7]
         db = load_db()
+        cfg = sheet_config(db)
         entries = [e for e in db["entries"].values() if str(e.get("date", "")).startswith(month)]
-        return {"ok": True, "entries": entries, "phones": list(db["phones"].values()), "config": sheet_config()}
+        stock = compute_stock(list(db["entries"].values()), cfg, day)
+        return {"ok": True, "entries": entries, "phones": list(db["phones"].values()), "config": cfg, "stock": stock, "today": datetime.date.today().isoformat()}
+    if action == "stock":
+        db = load_db()
+        cfg = sheet_config(db)
+        today = datetime.date.today().isoformat()
+        return {"ok": True, "stock": compute_stock(list(db["entries"].values()), cfg, today), "config": cfg, "today": today}
+    if action == "setLowStock":
+        code = str(req.get("material") or "")
+        value = req.get("value")
+        try:
+            value = 0 if value in ("", None) else float(value)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "bad-number"}
+        if value < 0:
+            return {"ok": False, "error": "bad-number"}
+        with LOCK:
+            db = load_db()
+            if code not in [m.get("code") for m in sheet_config(db).get("materials", [])]:
+                return {"ok": False, "error": "unknown-material"}
+            if value:
+                db["lowStock"][code] = value
+            else:
+                db["lowStock"].pop(code, None)
+            save_db(db)
+        cfg = sheet_config(db)
+        today = datetime.date.today().isoformat()
+        return {"ok": True, "config": cfg, "stock": compute_stock(list(db["entries"].values()), cfg, today), "today": today}
     return {"ok": False, "error": "unknown-action"}
 
 
@@ -116,13 +199,20 @@ def view_page():
         "<tr><td>%s</td><td>%s</td><td>%s</td></tr>" % (esc(p.get("phone")), esc(p.get("lastSync")), esc(p.get("worker")))
         for p in db["phones"].values()
     )
+    stock = compute_stock(list(db["entries"].values()), sheet_config(db), datetime.date.today().isoformat())
+    stock_rows = "".join(
+        "<tr class='%s'><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"
+        % ("low" if r["low"] else "", esc(r["code"]), esc(r["since"] or "not counted yet"), esc(r["added"]), esc(r["removed"]),
+           esc(r["used"]), esc(r["wasted"]), esc(r["left"] if r["tracked"] else ""), esc(r["lowStock"] or ""))
+        for r in stock
+    )
     status = "OFF (phones can't reach it)" if STATE["offline"] else "ON"
     return """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Test sheet</title><style>
 body{font-family:system-ui,sans-serif;margin:16px;color:#0f172a;background:#fff}
 table{border-collapse:collapse;width:100%%;font-size:14px;margin-bottom:24px}
 th,td{border:1px solid #cbd5e1;padding:5px 7px;text-align:left;vertical-align:top}
-th{background:#f1f5f9} tr.del td{color:#94a3b8;text-decoration:line-through}
+th{background:#f1f5f9} tr.low td{background:#fef2f2;color:#b91c1c} tr.del td{color:#94a3b8;text-decoration:line-through}
 form{display:inline-block;margin-right:8px} button{font-size:15px;padding:8px 12px;border-radius:8px;border:1px solid #94a3b8;background:#f8fafc;cursor:pointer}
 .box{padding:10px 12px;border-radius:8px;background:#f1f5f9;margin-bottom:14px}
 </style></head><body>
@@ -133,8 +223,10 @@ form{display:inline-block;margin-right:8px} button{font-size:15px;padding:8px 12
 <a href="/mock-sheet/view">Refresh</a></div>
 <h2>Entries (%d)</h2>
 <table><tr><th>Date</th><th>Time</th><th>Type</th><th>Product</th><th>Batches</th><th>Material</th><th>Qty</th><th>Reason</th><th>Raw material</th><th>Worker / Phone</th><th>Status</th></tr>%s</table>
+<h2>Stock</h2>
+<table><tr><th>Material</th><th>Counted since</th><th>Added</th><th>Removed</th><th>Used</th><th>Wasted</th><th>Left</th><th>Alert below</th></tr>%s</table>
 <h2>Phones</h2><table><tr><th>Phone</th><th>Last sync</th><th>Worker</th></tr>%s</table>
-</body></html>""" % (status, "on" if STATE["offline"] else "off", len(rows), trs, phones)
+</body></html>""" % (status, "on" if STATE["offline"] else "off", len(rows), trs, stock_rows, phones)
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -190,7 +282,7 @@ class Handler(SimpleHTTPRequestHandler):
                 STATE["offline"] = not STATE["offline"]
             elif "do=clear" in form:
                 with LOCK:
-                    save_db({"entries": {}, "phones": {}})
+                    save_db({"entries": {}, "phones": {}, "lowStock": {}})
             self.send_response(303)
             self.send_header("Location", "/mock-sheet/view")
             self.end_headers()

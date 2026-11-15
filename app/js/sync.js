@@ -2,7 +2,7 @@
 // Entries wait on the phone until the sheet confirms it has them.
 import * as store from './store.js';
 
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '0.2.0';
 const BATCH_SIZE = 200;
 const TIMEOUT_MS = 25000;
 
@@ -134,6 +134,26 @@ export async function testConnection() {
   const { url, key } = store.sheetConnection();
   if (!url) throw new Error('no-link');
   return post(url, key, { action: 'ping', phone: store.getSettings().phone });
+}
+
+// Stock left of every raw material (admin), computed by the sheet from all entries.
+export async function fetchStock() {
+  const { url, key } = store.sheetConnection();
+  if (!url) throw new Error('no-link');
+  const data = await post(url, key, { action: 'stock' });
+  store.setStockCache(data.stock || [], data.today || '');
+  if (data.config && store.setSheetConfig(data.config)) configListeners.forEach((fn) => fn());
+  return data;
+}
+
+// Saves a raw material's low stock alert level in the sheet ('' = no alert).
+export async function setLowStock(material, value) {
+  const { url, key } = store.sheetConnection();
+  if (!url) throw new Error('no-link');
+  const data = await post(url, key, { action: 'setLowStock', material, value });
+  if (data.stock) store.setStockCache(data.stock, data.today || '');
+  if (data.config && store.setSheetConfig(data.config)) configListeners.forEach((fn) => fn());
+  return data;
 }
 
 // Month's entries from every phone, for the Report screen.

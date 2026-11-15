@@ -200,6 +200,10 @@ export function describeEntry(e, config) {
   const product = findProduct(config, e.product);
   const pName = product ? nameOf(product) : e.product;
   if (e.type === 'production') return t('sumProduction', { batches: batchesLabel(e.batches, lang), product: pName });
+  if (e.type === 'stock') {
+    const m = findMaterial(config, e.material);
+    return t(e.move === 'out' ? 'sumStockOut' : 'sumStockIn', { qty: fmtNum(e.qty) + ' ' + (e.unit || ''), material: m ? nameOf(m) : e.material });
+  }
   if (e.material) {
     const m = findMaterial(config, e.material);
     return t('sumWasteMat', { qty: fmtNum(e.qty) + ' ' + (e.unit || ''), material: m ? nameOf(m) : e.material });

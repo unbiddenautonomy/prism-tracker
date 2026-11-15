@@ -44,6 +44,19 @@ export const REPORT_TEXT = {
     warnings: 'Problems in the Recipes sheet',
     openSheet: 'Open the Google Sheet',
     footer: 'Sent automatically by the Prism tracker.',
+    stock: 'Raw material stock',
+    stockEnd: 'end of {date}',
+    stockIn: 'In',
+    stockOut: 'Out',
+    stockLeft: 'Left',
+    stockAlert: 'Alert below',
+    stockLow: 'LOW',
+    stockNotTracked: 'not counted yet',
+    stockNone: 'No stock has been added yet. Add it in the Prism Admin app (Stock).',
+    stockOutNote: 'Out = used in batches + wasted + removed.',
+    lowStock: 'Low stock',
+    lowLine: '{left} left, alert below {alert}',
+    lowAction: 'Add stock in the Prism Admin app when new material arrives.',
   },
   hi: {
     title: 'दैनिक रिपोर्ट',
@@ -85,6 +98,19 @@ export const REPORT_TEXT = {
     warnings: 'रेसिपी शीट में गलतियाँ',
     openSheet: 'गूगल शीट खोलें',
     footer: 'Prism ट्रैकर से अपने-आप भेजा गया।',
+    stock: 'कच्चे माल का स्टॉक',
+    stockEnd: '{date} के अंत में',
+    stockIn: 'आया',
+    stockOut: 'गया',
+    stockLeft: 'बचा',
+    stockAlert: 'चेतावनी इससे कम पर',
+    stockLow: 'कम',
+    stockNotTracked: 'अभी गिना नहीं',
+    stockNone: 'अभी कोई स्टॉक नहीं जोड़ा गया। Prism Admin ऐप में (स्टॉक) जोड़ें।',
+    stockOutNote: 'गया = बैच में लगा + बर्बाद + घटाया।',
+    lowStock: 'स्टॉक कम है',
+    lowLine: '{left} बचा, चेतावनी {alert} से कम पर',
+    lowAction: 'नया माल आने पर Prism Admin ऐप में स्टॉक जोड़ें।',
   },
 };
 
@@ -124,7 +150,107 @@ export function buildReportModel(opts) {
     series,
     phones,
     warnings: config.warnings || [],
+    stock: Array.isArray(opts.stock) ? opts.stock : null,
   };
+}
+
+// ---- Raw material stock ----
+// Stock left = added - removed - used in batches - wasted.
+// A material is counted from its first "stock" entry onward, so batches made
+// before anyone added stock don't push it below zero.
+
+function entryKey(e) {
+  return String(e.date) + ' ' + (String(e.time || '') || '00:00');
+}
+
+function stockRow(code, unit, color, lowStock) {
+  return {
+    code,
+    unit: unit || '',
+    color: color || '',
+    lowStock: Number(lowStock) > 0 ? round3(lowStock) : 0,
+    tracked: false,
+    since: '',
+    added: 0,
+    removed: 0,
+    used: 0,
+    wasted: 0,
+    left: 0,
+    low: false,
+    day: { added: 0, removed: 0, used: 0, wasted: 0 },
+  };
+}
+
+function stockField(e) {
+  if (e.type === 'stock') return e.move === 'out' ? 'removed' : 'added';
+  if (e.type === 'production') return 'used';
+  if (e.type === 'waste') return 'wasted';
+  return '';
+}
+
+// Recomputes left / low after the totals change.
+export function finishStockRow(r) {
+  r.left = round3(r.added - r.removed - r.used - r.wasted);
+  r.low = r.tracked && r.lowStock > 0 && r.left < r.lowStock;
+  return r;
+}
+
+// entries: every entry ever (any phone). date: stock at the end of this day ('YYYY-MM-DD').
+// Returns one row per raw material, in the order of the Materials list.
+export function computeStock(entries, config, date) {
+  const mats = (config && config.materials) || [];
+  const live = (entries || []).filter(
+    (e) => e && e.status !== 'deleted' && /^\d{4}-\d{2}-\d{2}$/.test(String(e.date)) && (!date || e.date <= date)
+  );
+  const start = {};
+  live.forEach((e) => {
+    if (e.type !== 'stock') return;
+    const k = entryKey(e);
+    (Array.isArray(e.lines) ? e.lines : []).forEach((l) => {
+      if (l && l.material && (!(l.material in start) || k < start[l.material])) start[l.material] = k;
+    });
+  });
+  const rows = {};
+  const order = [];
+  mats.forEach((m) => {
+    rows[m.code] = stockRow(m.code, m.unit, m.color, m.lowStock);
+    order.push(m.code);
+  });
+  live.forEach((e) => {
+    const field = stockField(e);
+    if (!field) return;
+    const k = entryKey(e);
+    (Array.isArray(e.lines) ? e.lines : []).forEach((l) => {
+      if (!l || !l.material || !(l.material in start) || k < start[l.material]) return;
+      let r = rows[l.material];
+      if (!r) {
+        r = rows[l.material] = stockRow(l.material, l.unit, materialColor(config, l.material), 0);
+        order.push(l.material);
+      }
+      const q = Number(l.qty) || 0;
+      r[field] = round3(r[field] + q);
+      if (e.date === date) r.day[field] = round3(r.day[field] + q);
+    });
+  });
+  return order.map((code) => {
+    const r = rows[code];
+    r.tracked = code in start;
+    r.since = r.tracked ? start[code].slice(0, 10) : '';
+    return finishStockRow(r);
+  });
+}
+
+export function lowStockRows(stock) {
+  return (stock || []).filter((r) => r.low);
+}
+
+// "12 kg"
+function qtyUnit(v, unit) {
+  return fmtNum(v) + (unit ? ' ' + unit : '');
+}
+
+export function lowLineText(r, L) {
+  return L.lowLine.replace('{left}', qtyUnit(r.left, r.unit)).replace('{alert}', qtyUnit(r.lowStock, r.unit));
 }
 
 export function summarizePeriod(list, config) {
@@ -145,6 +271,7 @@ export function summarizePeriod(list, config) {
     m[field] = round3(m[field] + (Number(l.qty) || 0));
     m.total = round3(m.used + m.wasted);
   };
+  list = list.filter((e) => e.type === 'production' || e.type === 'waste');
   list.forEach((e) => {
     const w = e.worker || '?';
     const wk = workers[w] || (workers[w] = { worker: w, batches: 0, prodEntries: 0, wasteEntries: 0 });
@@ -308,6 +435,65 @@ function periodHtml(p, L, lang, isToday) {
   return s;
 }
 
+// Stock table with a bar per material. The bar is scaled to the biggest amount;
+// the thin dark mark on it is the alert level.
+export function stockHtml(stock, L) {
+  const tracked = stock.filter((r) => r.tracked);
+  if (!tracked.length) return '<p style="' + RS.muted + '">' + escapeHtml(L.stockNone) + '</p>';
+  const max = Math.max(1, ...tracked.map((r) => Math.max(r.left, r.lowStock)));
+  let s = '<table style="' + RS.table + '"><tr>';
+  [[L.material, 0], [L.stockIn, 1], [L.stockOut, 1], [L.stockLeft, 1], ['', 0], [L.stockAlert, 1]].forEach((hd) => {
+    s += '<th style="' + (hd[1] ? RS.thR : RS.th) + '">' + escapeHtml(hd[0]) + '</th>';
+  });
+  s += '</tr>';
+  stock.forEach((r) => {
+    const out = round3(r.day.used + r.day.wasted + r.day.removed);
+    const cell = (v, st) => '<td style="' + st + '">' + escapeHtml(v) + '</td>';
+    const lowSt = r.low ? 'background:#fef2f2;' : '';
+    s += '<tr>';
+    s += '<td style="' + RS.td + lowSt + '"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;border:1px solid #94a3b8;background:' +
+      escapeHtml(r.color || '#64748b') + ';margin-right:6px;"></span><b>' + escapeHtml(r.code) + '</b>' +
+      (r.low ? ' <span style="color:#b91c1c;font-weight:bold;">' + escapeHtml(L.stockLow) + '</span>' : '') + '</td>';
+    if (!r.tracked) {
+      s += '<td colspan="5" style="' + RS.td + 'color:#9ca3af;">' + escapeHtml(L.stockNotTracked) + '</td></tr>';
+      return;
+    }
+    s += cell(r.day.added ? '+' + qtyUnit(r.day.added, r.unit) : '0', r.day.added ? RS.tdR : RS.tdZero);
+    s += cell(out ? '−' + qtyUnit(out, r.unit) : '0', out ? RS.tdR : RS.tdZero);
+    s += '<td style="' + RS.tdR + lowSt + (r.low ? 'color:#b91c1c;' : '') + '"><b>' + escapeHtml(qtyUnit(r.left, r.unit)) + '</b></td>';
+    const pct = Math.max(0, Math.min(100, (Math.max(0, r.left) / max) * 100));
+    const mark = r.lowStock ? Math.min(100, (r.lowStock / max) * 100) : -1;
+    s += '<td style="' + RS.td + 'width:34%;"><div style="position:relative;height:12px;background:#eef2f7;border-radius:6px;">' +
+      '<div style="width:' + pct.toFixed(1) + '%;height:12px;border-radius:6px;background:' + (r.low ? '#dc2626' : '#16a34a') + ';"></div>' +
+      (mark >= 0 ? '<div style="position:absolute;top:-3px;left:' + mark.toFixed(1) + '%;width:2px;height:18px;background:#111827;"></div>' : '') +
+      '</div></td>';
+    s += cell(r.lowStock ? qtyUnit(r.lowStock, r.unit) : '–', r.lowStock ? RS.tdR : RS.tdZero);
+    s += '</tr>';
+  });
+  s += '</table>';
+  return s + '<p style="' + RS.muted + 'margin:4px 0 0;">' + escapeHtml(L.stockOutNote) + '</p>';
+}
+
+// The email sent the moment a raw material falls below its alert level.
+export function renderLowStockHtml(rows, appName, sheetUrl) {
+  const L = REPORT_TEXT.en;
+  let s = '<div style="' + RS.wrap + '">';
+  s += '<h1 style="' + RS.h1 + 'color:#b91c1c;">' + escapeHtml(appName + ' – ' + L.lowStock) + '</h1>';
+  s += tableHtml(
+    [L.material, L.stockLeft, L.stockAlert],
+    rows.map((r) => [r.code, qtyUnit(r.left, r.unit), qtyUnit(r.lowStock, r.unit)]),
+    [1, 2]
+  );
+  s += '<p>' + escapeHtml(L.lowAction) + '</p>';
+  if (sheetUrl) s += '<p><a href="' + escapeHtml(sheetUrl) + '">' + escapeHtml(L.openSheet) + '</a></p>';
+  return s + '<p style="' + RS.muted + '">' + escapeHtml(L.footer) + '</p></div>';
+}
+
+export function renderLowStockText(rows, appName) {
+  const L = REPORT_TEXT.en;
+  return [appName + ' – ' + L.lowStock, ''].concat(rows.map((r) => r.code + ': ' + lowLineText(r, L)), ['', L.lowAction]).join('\n');
+}
+
 export function renderReportHtml(model, lang) {
   const L = REPORT_TEXT[lang] || REPORT_TEXT.en;
   const day = Number(model.date.slice(8, 10));
@@ -338,8 +524,16 @@ export function renderReportHtml(model, lang) {
   });
   s += '</tr></table>';
 
+  lowStockRows(model.stock).forEach((r) => {
+    s += '<div style="' + RS.warn + '">⚠️ <b>' + escapeHtml(L.lowStock) + ': ' + escapeHtml(r.code) + '</b> – ' + escapeHtml(lowLineText(r, L)) + '</div>';
+  });
+
   s += '<h2 style="' + RS.h2 + '">' + escapeHtml(L.today + ' · ' + shortDate(model.date, lang)) + '</h2>';
   s += periodHtml(model.today, L, lang, true);
+  if (model.stock) {
+    s += '<h2 style="' + RS.h2 + '">' + escapeHtml(L.stock + ' · ' + L.stockEnd.replace('{date}', shortDate(model.date, lang))) + '</h2>';
+    s += stockHtml(model.stock, L);
+  }
   s += '<h2 style="' + RS.h2 + '">' + escapeHtml(L.month + ' · ' + monthRange) + '</h2>';
   s += periodHtml(model.month, L, lang, false);
 
@@ -383,7 +577,16 @@ export function renderReportText(model, lang) {
     }
     out.push('');
   };
+  lowStockRows(model.stock).forEach((r) => out.push('! ' + L.lowStock + ': ' + r.code + ' – ' + lowLineText(r, L)));
+  if (lowStockRows(model.stock).length) out.push('');
   period(L.today, model.today, true);
+  if (model.stock) {
+    out.push('== ' + L.stock + ' (' + L.stockEnd.replace('{date}', shortDate(model.date, lang)) + ') ==');
+    const tracked = model.stock.filter((r) => r.tracked);
+    if (!tracked.length) out.push('  ' + L.stockNone);
+    tracked.forEach((r) => out.push('  ' + r.code + ': ' + qtyUnit(r.left, r.unit) + (r.lowStock ? ' (' + L.stockAlert.toLowerCase() + ' ' + qtyUnit(r.lowStock, r.unit) + ')' : '') + (r.low ? ' ' + L.stockLow : '')));
+    out.push('');
+  }
   period(L.month, model.month, false);
   model.phones.filter((p) => !p.sentToday).forEach((p) => out.push('! ' + p.phone + ': ' + L.notToday));
   return out.join('\n');

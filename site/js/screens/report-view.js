@@ -1,10 +1,11 @@
 // Report screen: a dashboard built from the same numbers as the daily email.
 import { h, dot } from '../ui.js';
 import { t, getLang, nameOf } from '../i18n.js';
-import { localYmd, addDays, prettyDate, shortDate, fmtNum, batchesLabel, findProduct, lineText, reasonByKey, normalizeConfig } from '../recipes.js';
-import { buildReportModel, renderReportText, REPORT_TEXT } from '../report.js';
+import { localYmd, addDays, prettyDate, shortDate, fmtNum, round3, materialColor, batchesLabel, findProduct, lineText, reasonByKey, normalizeConfig } from '../recipes.js';
+import { buildReportModel, renderReportText, REPORT_TEXT, computeStock } from '../report.js';
 import { icon, REASON_ICONS } from '../icons.js';
-import { sparkline, bar, usedWastedBar } from '../charts.js';
+import { sparkline, bar, usedWastedBar, stockBar } from '../charts.js';
+import { currentStock, lowStockBox } from './stock.js';
 import * as store from '../store.js';
 import * as nav from '../nav.js';
 import * as sync from '../sync.js';
@@ -23,8 +24,36 @@ export function openReport() {
   nav.go('report');
 }
 
+// Stock without a fresh answer from the sheet: today's best guess on this phone.
+function localStock(cfg) {
+  if (day === localYmd()) {
+    const cur = currentStock();
+    if (cur) return cur.rows;
+  }
+  return store.sheetConnection().url ? null : computeStock(store.allEntries(), cfg, day);
+}
+
 function localModel(cfg) {
-  return buildReportModel({ entries: store.allEntries(), config: cfg, date: day, phones: [], source: 'phone' });
+  return buildReportModel({ entries: store.allEntries(), config: cfg, date: day, phones: [], source: 'phone', stock: localStock(cfg) });
+}
+
+function stockPanel(stock, L, lang) {
+  const tracked = stock.filter((r) => r.tracked);
+  const head = h('div', { class: 'panel-title' }, L.stock, h('small', null, L.stockEnd.replace('{date}', shortDate(day, lang))));
+  if (!tracked.length) return h('div', { class: 'panel glass' }, head, h('p', { class: 'hint' }, L.stockNone));
+  const max = Math.max(1, ...tracked.map((r) => Math.max(r.left, r.lowStock)));
+  const notYet = stock.filter((r) => !r.tracked).map((r) => r.code);
+  return h('div', { class: 'panel glass' },
+    head,
+    tracked.map((r) => {
+      const out = round3(r.day.used + r.day.wasted + r.day.removed);
+      const moves = [r.day.added ? '+' + fmtNum(r.day.added) : '', out ? '−' + fmtNum(out) : ''].filter(Boolean).join(' ');
+      return h('div', { class: 'rrow' + (r.low ? ' is-low' : ''), title: r.lowStock ? L.stockAlert + ' ' + fmtNum(r.lowStock) + ' ' + r.unit : '' },
+        h('div', { class: 'rrow-name' }, dot(r.color), h('span', null, r.code), r.low ? h('b', { class: 'low-badge' }, L.stockLow) : null),
+        h('div', { class: 'rrow-val num' }, fmtNum(r.left), h('small', null, ' ' + r.unit), moves ? h('small', null, ' · ' + moves) : null),
+        stockBar(r.left, r.lowStock, max, r.color, r.low));
+    }),
+    notYet.length ? h('p', { class: 'hint' }, L.stockNotTracked + ': ' + notYet.join(', ')) : null);
 }
 
 function kpi(label, value, series, color) {
@@ -123,6 +152,7 @@ function dashboard(model, cfg) {
   const d = Number(model.date.slice(8, 10));
   return [
     model.warnings.length ? h('div', { class: 'warn-box' }, h('b', null, L.warnings), h('ul', null, model.warnings.map((w) => h('li', null, w)))) : null,
+    model.stock ? lowStockBox(model.stock.filter((r) => r.low), !!window.PRISM_ADMIN) : null,
     h('div', { class: 'kpis kpis-3' },
       kpi(L.batchesToday, fmtNum(model.today.batches), model.series.batches, EMERALD()),
       kpi(L.wasteToday, String(model.today.wasteCount), model.series.waste, AMBER()),
@@ -131,6 +161,7 @@ function dashboard(model, cfg) {
     productPanel(model.today, cfg, L, lang),
     materialPanel(model.today, L),
     wastePanel(model.today, cfg, L, lang, true),
+    model.stock ? stockPanel(model.stock, L, lang) : null,
     h('div', { class: 'section-title' }, L.month, h('small', null, (d === 1 ? '' : '1–') + shortDate(model.date, lang))),
     productPanel(model.month, cfg, L, lang),
     materialPanel(model.month, L),
@@ -162,7 +193,9 @@ export function reportScreen() {
       try {
         const data = await sync.fetchReport(day);
         if (data.config) useCfg = normalizeConfig(Object.assign({}, cfg, data.config));
-        model = buildReportModel({ entries: data.entries, config: useCfg, date: day, phones: data.phones, source: 'sheet' });
+        (data.stock || []).forEach((r) => (r.color = materialColor(useCfg, r.code)));
+        if (data.stock && day === data.today) store.setStockCache(data.stock, data.today);
+        model = buildReportModel({ entries: data.entries, config: useCfg, date: day, phones: data.phones, source: 'sheet', stock: data.stock || null });
         source.textContent = t('reportAll');
         source.className = 'report-source is-sheet';
       } catch (err) {
@@ -202,6 +235,7 @@ export function reportScreen() {
     back: isAdmin ? false : undefined,
     tone: 'purple',
     body: [
+      isAdmin ? h('button', { class: 'btn btn-primary btn-stock', onclick: () => nav.go('stock') }, icon('stack', 20), t('stockTitle')) : null,
       h(
         'div',
         { class: 'report-nav glass' },
