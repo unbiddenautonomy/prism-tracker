@@ -395,6 +395,7 @@ const REPORT_TEXT = {
     sentToday: 'sent today',
     notToday: 'NOT sent today',
     spoiled: 'spoiled batch',
+    madeBefore: 'already counted in Batches made',
     warnings: 'Problems in the Recipes sheet',
     openSheet: 'Open the Google Sheet',
     footer: 'Sent automatically by the Prism tracker.',
@@ -449,6 +450,7 @@ const REPORT_TEXT = {
     sentToday: '\u0906\u091c \u092d\u0947\u091c\u093e',
     notToday: '\u0906\u091c \u0928\u0939\u0940\u0902 \u092d\u0947\u091c\u093e',
     spoiled: '\u0916\u0930\u093e\u092c \u092c\u0948\u091a',
+    madeBefore: '\u092a\u0939\u0932\u0947 \u0939\u0940 "\u092c\u0948\u091a \u092c\u0928\u0947" \u092e\u0947\u0902 \u0917\u093f\u0928\u093e',
     warnings: '\u0930\u0947\u0938\u093f\u092a\u0940 \u0936\u0940\u091f \u092e\u0947\u0902 \u0917\u0932\u0924\u093f\u092f\u093e\u0901',
     openSheet: '\u0917\u0942\u0917\u0932 \u0936\u0940\u091f \u0916\u094b\u0932\u0947\u0902',
     footer: 'Prism \u091f\u094d\u0930\u0948\u0915\u0930 \u0938\u0947 \u0905\u092a\u0928\u0947-\u0906\u092a \u092d\u0947\u091c\u093e \u0917\u092f\u093e\u0964',
@@ -535,10 +537,15 @@ function stockRow(code, unit, color, lowStock) {
   };
 }
 
+// A spoiled batch that was already recorded as made used no extra raw material.
+function wasteUsesRaw(e) {
+  return !(e.type === 'waste' && !e.material && e.madeBefore === true);
+}
+
 function stockField(e) {
   if (e.type === 'stock') return e.move === 'out' ? 'removed' : 'added';
   if (e.type === 'production') return 'used';
-  if (e.type === 'waste') return 'wasted';
+  if (e.type === 'waste') return wasteUsesRaw(e) ? 'wasted' : '';
   return '';
 }
 
@@ -643,7 +650,7 @@ function summarizePeriod(list, config) {
       wk.wasteEntries += 1;
       const r = e.reason || 'other';
       reasons[r] = (reasons[r] || 0) + 1;
-      lines.forEach((l) => addLine(l, 'wasted'));
+      if (wasteUsesRaw(e)) lines.forEach((l) => addLine(l, 'wasted'));
       waste.push({
         date: e.date,
         time: e.time || '',
@@ -657,6 +664,7 @@ function summarizePeriod(list, config) {
         entered: e.entered || '',
         reason: r,
         note: e.note || '',
+        madeBefore: e.madeBefore === true,
         lines,
       });
     }
@@ -730,7 +738,8 @@ function wasteWhat(w, L) {
 
 function wasteAmount(w, lang) {
   if (w.material) return fmtNum(w.qty) + ' ' + w.unit + (w.entered ? ' (' + w.entered + ')' : '');
-  return batchesLabel(w.batches, lang) + ' = ' + lineText(w.lines);
+  const L = REPORT_TEXT[lang] || REPORT_TEXT.en;
+  return batchesLabel(w.batches, lang) + ' = ' + lineText(w.lines) + (w.madeBefore ? ' (' + L.madeBefore + ')' : '');
 }
 
 function periodHtml(p, L, lang, isToday) {
@@ -988,6 +997,7 @@ const ENTRY_COLS = [
   ['createdAt', 'Created'],
   ['updatedAt', 'Updated'],
   ['linesJson', 'Raw material (data)'],
+  ['madeBefore', 'Already made'], // spoiled batch already recorded as made: not taken off stock again
 ];
 const ENTRY_TEXT_FIELDS = ['date', 'time', 'id', 'createdAt', 'updatedAt', 'linesJson', 'entered', 'note', 'product', 'worker', 'phone'];
 const USE_HEADERS = ['Date', 'Type', 'Material', 'Qty', 'Unit', 'Product', 'Reason', 'Worker', 'Phone', 'Entry ID'];
@@ -1070,6 +1080,18 @@ function writeRows_(sh, startRow, rows, textCols) {
   if (!rows.length) return;
   textCols.forEach((c) => sh.getRange(startRow, c, rows.length, 1).setNumberFormat('@'));
   sh.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+}
+
+// Columns added in later versions go at the end; older sheets get their header filled in.
+function addEntryHeaders_(sh) {
+  if (sh.getLastRow() < 1) return;
+  const heads = sh.getRange(1, 1, 1, ENTRY_COLS.length).getValues()[0];
+  for (let i = 0; i < ENTRY_COLS.length; i++) {
+    if (str_(heads[i])) continue;
+    if (i > 0 && !str_(heads[i - 1])) return; // something else is wrong; let checkHeaders_ report it
+    sh.getRange(1, i + 1).setValue(ENTRY_COLS[i][1]).setFontWeight('bold').setBackground('#e2e8f0');
+    heads[i] = ENTRY_COLS[i][1];
+  }
 }
 
 function colOf_(field) {
@@ -1240,6 +1262,7 @@ function cleanEntry_(raw) {
     entered: s(raw.entered, 80),
     reason: type === 'waste' ? s(raw.reason, 20) : '',
     move: type === 'stock' ? (raw.move === 'out' ? 'out' : 'in') : '',
+    madeBefore: type === 'waste' && !raw.material && raw.madeBefore === true,
     note: s(raw.note, 300),
     worker: s(raw.worker, 60),
     phone: s(raw.phone, 60),
@@ -1276,6 +1299,7 @@ function entryToRow_(e) {
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
     linesJson: JSON.stringify(e.lines),
+    madeBefore: e.madeBefore ? 'Yes' : '',
   };
   return ENTRY_COLS.map((c) => (v[c[0]] == null ? '' : v[c[0]]));
 }
@@ -1304,6 +1328,7 @@ function rowToEntry_(r) {
     entered: str_(get('entered')),
     reason: type === 'waste' ? reasonKeyFromLabel(get('reason')) : '',
     move: type === 'stock' ? (label === 'stock out' ? 'out' : 'in') : '',
+    madeBefore: type === 'waste' && /^y/i.test(str_(get('madeBefore'))),
     note: str_(get('note')),
     worker: str_(get('worker')),
     phone: str_(get('phone')),
@@ -1313,7 +1338,7 @@ function rowToEntry_(r) {
 }
 
 function useRowsFor_(e) {
-  if (e.status !== 'ok') return [];
+  if (e.status !== 'ok' || !wasteUsesRaw(e)) return [];
   const type = typeLabel_(e);
   const reason = e.type === 'waste' ? reasonByKey(e.reason).en : '';
   return e.lines.map((l) => [e.date, type, l.material, l.qty, l.unit, e.product, reason, e.worker, e.phone, e.id]);
@@ -1323,6 +1348,7 @@ function upsertEntries_(rawEntries) {
   const ss = getSS_();
   const sh = ss.getSheetByName(TAB.entries);
   const useSh = ss.getSheetByName(TAB.use);
+  addEntryHeaders_(sh);
   checkHeaders_(sh, ENTRY_COLS.map((c) => c[1]));
   checkHeaders_(useSh, USE_HEADERS);
 
@@ -1776,7 +1802,7 @@ function setup() {
   // An empty key would let nobody in; fill it if someone cleared it.
   if ('Secret key' in have && !str_(have['Secret key'])) setSetting_('Secret key', Utilities.getUuid().replace(/-/g, '').slice(0, 24));
 
-  ensureSheet_(ss, TAB.entries, ENTRY_COLS.map((c) => c[1]));
+  addEntryHeaders_(ensureSheet_(ss, TAB.entries, ENTRY_COLS.map((c) => c[1])));
   ensureSheet_(ss, TAB.use, USE_HEADERS);
   ensureSheet_(ss, TAB.phones, PHONE_HEADERS);
   ensureSheet_(ss, TAB.stock, STOCK_HEADERS);

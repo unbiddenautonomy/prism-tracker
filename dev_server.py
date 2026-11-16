@@ -98,6 +98,8 @@ def compute_stock(entries, cfg, date):
     for e in live:
         t = e.get("type")
         field = ("removed" if e.get("move") == "out" else "added") if t == "stock" else {"production": "used", "waste": "wasted"}.get(t)
+        if t == "waste" and not e.get("material") and e.get("madeBefore") is True:
+            continue  # spoiled batch already recorded as made
         if not field:
             continue
         for l in e.get("lines") or []:

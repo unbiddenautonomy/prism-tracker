@@ -11,7 +11,8 @@ import { productGrid } from './production.js';
 let draft = null;
 
 function fresh() {
-  return { kind: null, material: null, product: null, amount: '', unitMode: -1, batches: 1, reason: null, note: '', date: localYmd(), editId: null };
+  // madeBefore: spoiled batch was already recorded under "Batches made" (true/false; null = not answered yet)
+  return { kind: null, material: null, product: null, amount: '', unitMode: -1, batches: 1, madeBefore: null, reason: null, note: '', date: localYmd(), editId: null };
 }
 
 export function startWaste() {
@@ -46,6 +47,7 @@ export function openWasteFromEntry(entry, opts) {
     d.kind = 'product';
     d.product = entry.product;
     d.batches = Number(entry.batches) || 1;
+    d.madeBefore = entry.madeBefore === true;
   }
   draft = d;
   const path = o.step === 'reason' ? 'waste/reason' : 'waste/amount';
@@ -134,7 +136,10 @@ function productPick() {
     heading: t('whichProductWaste'),
     body: cfg.products.length
       ? productGrid(cfg.products, (p) => {
-          if (draft.product !== p.name) draft.batches = 1;
+          if (draft.product !== p.name) {
+            draft.batches = 1;
+            draft.madeBefore = null;
+          }
           draft.product = p.name;
           draft.kind = 'product';
           nav.go('waste/amount');
@@ -217,7 +222,21 @@ function materialAmount(m) {
 
 function productAmount(p, cfg) {
   const usesBox = h('div');
-  const nextBtn = h('button', { class: 'btn btn-primary btn-big', onclick: () => nav.go('waste/reason') }, t('next'), icon('next', 20, 2.25));
+  const madeHint = h('p', { class: 'hint' });
+  const nextBtn = h('button', { class: 'btn btn-primary btn-big', onclick: () => nav.go('waste/reason') });
+  function drawNext() {
+    const ok = draft.madeBefore === true || draft.madeBefore === false;
+    nextBtn.disabled = !ok;
+    nextBtn.replaceChildren(ok ? t('next') : t('madeBeforePick'), ...(ok ? [icon('next', 20, 2.25)] : []));
+    madeHint.textContent = draft.madeBefore === true ? t('madeBeforeYesHint') : draft.madeBefore === false ? t('madeBeforeNoHint') : '';
+  }
+  const madeQuestion = h('div', { class: 'field' },
+    h('div', { class: 'label label-q' }, t('madeBeforeQ')),
+    segmented([{ value: true, label: t('madeBeforeYes') }, { value: false, label: t('madeBeforeNo') }], draft.madeBefore, (v) => {
+      draft.madeBefore = v;
+      drawNext();
+    }),
+    madeHint);
   const counter = stepper({
     value: draft.batches,
     min: 0.5,
@@ -232,12 +251,13 @@ function productAmount(p, cfg) {
     usesBox.replaceChildren(linesList(linesForBatches(p, draft.batches, cfg.materials), cfg));
   }
   draw();
+  drawNext();
   return base({
     steps: steps(2, 3),
     heading: t('howManySpoiled'),
     headingColor: p.color,
     sub: nameOf(p),
-    body: [counter, h('div', { class: 'label' }, t('rawLost')), usesBox],
+    body: [counter, madeQuestion, h('div', { class: 'label' }, t('rawLost')), usesBox],
     footer: nextBtn,
   });
 }
@@ -250,6 +270,7 @@ function buildFields(cfg) {
     const count = parseFloat(draft.amount);
     return {
       type: 'waste',
+      madeBefore: false,
       material: m.code,
       qty,
       unit: m.unit,
@@ -272,6 +293,7 @@ function buildFields(cfg) {
     enteredContainer: '',
     product: p.name,
     batches: draft.batches,
+    madeBefore: draft.madeBefore === true,
     lines: linesForBatches(p, draft.batches, cfg.materials),
   };
 }
@@ -280,7 +302,7 @@ function reasonStep() {
   const cfg = store.getConfig();
   const valid =
     (draft.kind === 'material' && findMaterial(cfg, draft.material) && materialQty(findMaterial(cfg, draft.material)) > 0) ||
-    (draft.kind === 'product' && findProduct(cfg, draft.product));
+    (draft.kind === 'product' && findProduct(cfg, draft.product) && (draft.madeBefore === true || draft.madeBefore === false));
   if (!valid) {
     nav.replace('waste');
     return null;

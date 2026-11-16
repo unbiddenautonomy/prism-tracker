@@ -41,6 +41,7 @@ export const REPORT_TEXT = {
     sentToday: 'sent today',
     notToday: 'NOT sent today',
     spoiled: 'spoiled batch',
+    madeBefore: 'already counted in Batches made',
     warnings: 'Problems in the Recipes sheet',
     openSheet: 'Open the Google Sheet',
     footer: 'Sent automatically by the Prism tracker.',
@@ -95,6 +96,7 @@ export const REPORT_TEXT = {
     sentToday: 'आज भेजा',
     notToday: 'आज नहीं भेजा',
     spoiled: 'खराब बैच',
+    madeBefore: 'पहले ही "बैच बने" में गिना',
     warnings: 'रेसिपी शीट में गलतियाँ',
     openSheet: 'गूगल शीट खोलें',
     footer: 'Prism ट्रैकर से अपने-आप भेजा गया।',
@@ -181,10 +183,15 @@ function stockRow(code, unit, color, lowStock) {
   };
 }
 
+// A spoiled batch that was already recorded as made used no extra raw material.
+export function wasteUsesRaw(e) {
+  return !(e.type === 'waste' && !e.material && e.madeBefore === true);
+}
+
 function stockField(e) {
   if (e.type === 'stock') return e.move === 'out' ? 'removed' : 'added';
   if (e.type === 'production') return 'used';
-  if (e.type === 'waste') return 'wasted';
+  if (e.type === 'waste') return wasteUsesRaw(e) ? 'wasted' : '';
   return '';
 }
 
@@ -289,7 +296,7 @@ export function summarizePeriod(list, config) {
       wk.wasteEntries += 1;
       const r = e.reason || 'other';
       reasons[r] = (reasons[r] || 0) + 1;
-      lines.forEach((l) => addLine(l, 'wasted'));
+      if (wasteUsesRaw(e)) lines.forEach((l) => addLine(l, 'wasted'));
       waste.push({
         date: e.date,
         time: e.time || '',
@@ -303,6 +310,7 @@ export function summarizePeriod(list, config) {
         entered: e.entered || '',
         reason: r,
         note: e.note || '',
+        madeBefore: e.madeBefore === true,
         lines,
       });
     }
@@ -376,7 +384,8 @@ function wasteWhat(w, L) {
 
 function wasteAmount(w, lang) {
   if (w.material) return fmtNum(w.qty) + ' ' + w.unit + (w.entered ? ' (' + w.entered + ')' : '');
-  return batchesLabel(w.batches, lang) + ' = ' + lineText(w.lines);
+  const L = REPORT_TEXT[lang] || REPORT_TEXT.en;
+  return batchesLabel(w.batches, lang) + ' = ' + lineText(w.lines) + (w.madeBefore ? ' (' + L.madeBefore + ')' : '');
 }
 
 function periodHtml(p, L, lang, isToday) {

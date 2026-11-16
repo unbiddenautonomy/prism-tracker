@@ -116,7 +116,7 @@ function wastePanel(p, cfg, L, lang, isToday) {
         h('div', null,
           h('div', { class: 'wrow-main' }, what),
           h('div', { class: 'wrow-meta num' }, [w.time, lang === 'hi' ? rs.hi : rs.en, w.worker, w.note].filter(Boolean).join(' · ')),
-          !w.material && w.lines.length ? h('div', { class: 'wrow-meta num' }, lineText(w.lines)) : null));
+          !w.material && w.lines.length ? h('div', { class: 'wrow-meta num' }, lineText(w.lines) + (w.madeBefore ? ' · ' + L.madeBefore : '')) : null));
     })));
 }
 

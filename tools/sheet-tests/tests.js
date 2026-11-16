@@ -258,4 +258,26 @@ check('alert level cleared', clr.ok && stockOf(clr.config.materials, 'S2').lowSt
 setup();
 check('setup keeps stock tab + alert column', sheet('Stock') && sRow('S2')[7] === 59 && sheet('Materials').getRange(1, 9).getValue() === 'Low stock alert');
 
+// 16. spoiled batch that was already recorded as made
+var oldSheetHead = sheet('Entries').getRange(1, ENTRY_COLS.length).getValue();
+check('Entries has the Already made column', oldSheetHead === 'Already made', oldSheetHead);
+sheet('Entries').getRange(1, ENTRY_COLS.length).setValue('');
+var spoilA = mk('sp1', { type: 'waste', product: 'Y111', batches: 1, reason: 'failed', madeBefore: true, time: '16:00', lines: [{ material: 'S2', qty: 7, unit: 'kg' }] });
+var spoilB = mk('sp2', { type: 'waste', product: 'Y111', batches: 1, reason: 'failed', madeBefore: false, time: '16:05', lines: [{ material: 'S2', qty: 3, unit: 'kg' }] });
+var before16 = stockOf(stockNow_(), 'S2').left;
+res = post({ key: s.key, action: 'sync', phone: 'Phone A', entries: [spoilA, spoilB] });
+check('older sheet gets the new column header by itself', res.ok && sheet('Entries').getRange(1, ENTRY_COLS.length).getValue() === 'Already made', res);
+var spRow = rows('Entries').filter(function (r) { return r[colOf_('id') - 1] === 'sp1'; })[0];
+check('Already made written as Yes', spRow[colOf_('madeBefore') - 1] === 'Yes', spRow[colOf_('madeBefore') - 1]);
+var spBack = readAllEntries_().filter(function (e) { return e.id === 'sp1' || e.id === 'sp2'; });
+check('Already made read back', spBack[0].madeBefore === true && spBack[1].madeBefore === false, spBack);
+check('only the not-recorded spoiled batch is taken off stock (3 kg, not 7)', stockOf(stockNow_(), 'S2').left === before16 - 3, [before16, stockOf(stockNow_(), 'S2').left]);
+check('no Material Use rows for the already-made batch', rows('Material Use').filter(function (r) { return r[9] === 'sp1'; }).length === 0 && rows('Material Use').filter(function (r) { return r[9] === 'sp2'; }).length === 1);
+var m16 = buildReportModel({ entries: readAllEntries_(), config: readConfig_(), date: today, source: 'sheet' });
+var s2w = m16.today.materials.filter(function (m) { return m.code === 'S2'; })[0];
+check('report: already-made batch is listed as waste but its raw material is not counted again', s2w.wasted === 13 && m16.today.waste.some(function (w) { return w.madeBefore; }), s2w);
+check('email text marks it', renderReportText(m16, 'en').indexOf('already counted in Batches made') >= 0);
+var matWaste = cleanEntry_({ id: 'x', type: 'waste', material: 'S2', qty: 1, madeBefore: true, lines: [] });
+check('raw material waste can never be marked already made', matWaste.madeBefore === false);
+
 console.log(__fails ? ('\n' + __fails + ' FAILED') : '\nALL PASSED');

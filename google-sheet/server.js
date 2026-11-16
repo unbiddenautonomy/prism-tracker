@@ -39,6 +39,7 @@ const ENTRY_COLS = [
   ['createdAt', 'Created'],
   ['updatedAt', 'Updated'],
   ['linesJson', 'Raw material (data)'],
+  ['madeBefore', 'Already made'], // spoiled batch already recorded as made: not taken off stock again
 ];
 const ENTRY_TEXT_FIELDS = ['date', 'time', 'id', 'createdAt', 'updatedAt', 'linesJson', 'entered', 'note', 'product', 'worker', 'phone'];
 const USE_HEADERS = ['Date', 'Type', 'Material', 'Qty', 'Unit', 'Product', 'Reason', 'Worker', 'Phone', 'Entry ID'];
@@ -121,6 +122,18 @@ function writeRows_(sh, startRow, rows, textCols) {
   if (!rows.length) return;
   textCols.forEach((c) => sh.getRange(startRow, c, rows.length, 1).setNumberFormat('@'));
   sh.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+}
+
+// Columns added in later versions go at the end; older sheets get their header filled in.
+function addEntryHeaders_(sh) {
+  if (sh.getLastRow() < 1) return;
+  const heads = sh.getRange(1, 1, 1, ENTRY_COLS.length).getValues()[0];
+  for (let i = 0; i < ENTRY_COLS.length; i++) {
+    if (str_(heads[i])) continue;
+    if (i > 0 && !str_(heads[i - 1])) return; // something else is wrong; let checkHeaders_ report it
+    sh.getRange(1, i + 1).setValue(ENTRY_COLS[i][1]).setFontWeight('bold').setBackground('#e2e8f0');
+    heads[i] = ENTRY_COLS[i][1];
+  }
 }
 
 function colOf_(field) {
@@ -291,6 +304,7 @@ function cleanEntry_(raw) {
     entered: s(raw.entered, 80),
     reason: type === 'waste' ? s(raw.reason, 20) : '',
     move: type === 'stock' ? (raw.move === 'out' ? 'out' : 'in') : '',
+    madeBefore: type === 'waste' && !raw.material && raw.madeBefore === true,
     note: s(raw.note, 300),
     worker: s(raw.worker, 60),
     phone: s(raw.phone, 60),
@@ -327,6 +341,7 @@ function entryToRow_(e) {
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
     linesJson: JSON.stringify(e.lines),
+    madeBefore: e.madeBefore ? 'Yes' : '',
   };
   return ENTRY_COLS.map((c) => (v[c[0]] == null ? '' : v[c[0]]));
 }
@@ -355,6 +370,7 @@ function rowToEntry_(r) {
     entered: str_(get('entered')),
     reason: type === 'waste' ? reasonKeyFromLabel(get('reason')) : '',
     move: type === 'stock' ? (label === 'stock out' ? 'out' : 'in') : '',
+    madeBefore: type === 'waste' && /^y/i.test(str_(get('madeBefore'))),
     note: str_(get('note')),
     worker: str_(get('worker')),
     phone: str_(get('phone')),
@@ -364,7 +380,7 @@ function rowToEntry_(r) {
 }
 
 function useRowsFor_(e) {
-  if (e.status !== 'ok') return [];
+  if (e.status !== 'ok' || !wasteUsesRaw(e)) return [];
   const type = typeLabel_(e);
   const reason = e.type === 'waste' ? reasonByKey(e.reason).en : '';
   return e.lines.map((l) => [e.date, type, l.material, l.qty, l.unit, e.product, reason, e.worker, e.phone, e.id]);
@@ -374,6 +390,7 @@ function upsertEntries_(rawEntries) {
   const ss = getSS_();
   const sh = ss.getSheetByName(TAB.entries);
   const useSh = ss.getSheetByName(TAB.use);
+  addEntryHeaders_(sh);
   checkHeaders_(sh, ENTRY_COLS.map((c) => c[1]));
   checkHeaders_(useSh, USE_HEADERS);
 
@@ -827,7 +844,7 @@ function setup() {
   // An empty key would let nobody in; fill it if someone cleared it.
   if ('Secret key' in have && !str_(have['Secret key'])) setSetting_('Secret key', Utilities.getUuid().replace(/-/g, '').slice(0, 24));
 
-  ensureSheet_(ss, TAB.entries, ENTRY_COLS.map((c) => c[1]));
+  addEntryHeaders_(ensureSheet_(ss, TAB.entries, ENTRY_COLS.map((c) => c[1])));
   ensureSheet_(ss, TAB.use, USE_HEADERS);
   ensureSheet_(ss, TAB.phones, PHONE_HEADERS);
   ensureSheet_(ss, TAB.stock, STOCK_HEADERS);
