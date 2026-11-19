@@ -31,7 +31,7 @@ Checks that run on this machine: `bash tools/sheet-tests/run.sh` — **169 check
 | 22 | The website carried the workers' names and nothing kept it out of search engines. A `--demo` switch could publish the recipes, and the guide said to remember to stop using it once the real ones went in. | No names in the published copy, plus a "stay away" header and `robots.txt`. The `--demo` switch is **gone**: the published copy can no longer contain recipes, names or the key whatever anyone types, so there is no build step left to get wrong. Products come from the Sheet and are managed in the admin app. |
 | 7 | Entries only left a phone while the app was open on the screen. | Android Chrome now sends them with the app shut, as soon as there is signal, and the app ticks them off when it next opens. iPhones don't offer this, so there nothing changes. |
 | 9 | Nothing said when the Sheet script was older than the app — a forgotten "New version" on deploy was invisible. | Both carry a real version number (now 0.3.0). Settings shows the Sheet's and warns in plain words when it is behind. |
-| 13 | The Sheet was the only long-term copy, with no backup. | A dated copy is saved in a "Prism backups" folder in Drive every Sunday, newest 8 kept, with **Prism → Back up this sheet now** for one on demand. |
+| 13 | The Sheet was the only long-term copy, with no backup. | Every Sunday the entries, materials, recipes and workers are emailed as CSV files, with **Prism → Email a backup now** for one on demand. Done by email on purpose: a Drive copy would have required "see, edit, create and delete all of your Drive files", which is far more than a backup is worth. The secret key is left out. |
 
 ## Still open
 

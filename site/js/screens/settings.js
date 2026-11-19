@@ -35,10 +35,12 @@ function field(label, input) {
 // Which Code.gs the sheet is actually running. Different from the app's own version
 // means the new script was pasted but "New version" was missed on the deployment.
 function sheetVersionNote(conn, s) {
+  if (!conn.url || !s.lastSyncAt) return null; // nothing heard from the sheet yet
   const v = String(s.sheetVersion || '');
-  if (!conn.url || !v) return null;
   if (v === sync.APP_VERSION) return h('p', { class: 'hint' }, t('setSheetVersion', { v }));
-  return h('div', { class: 'warn-box' }, t('setSheetOld', { v, a: sync.APP_VERSION }));
+  // Scripts older than 0.3.0 don't say which version they are at all, and that is
+  // exactly the case worth warning about, so silence must not look like agreement.
+  return h('div', { class: 'warn-box' }, v ? t('setSheetOld', { v, a: sync.APP_VERSION }) : t('setSheetUnknown', { a: sync.APP_VERSION }));
 }
 
 function settingsBody() {

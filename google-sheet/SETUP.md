@@ -89,13 +89,17 @@ The email also has a **Raw material stock** section, once stock has been added i
 
 ## 8. Backups
 
-This Sheet is the only long-term copy of your entries: the phones keep about two months and cannot send them again. So the script saves a copy of the whole Sheet for you.
+This Sheet is the only long-term copy of your entries: the phones keep about two months and cannot send them again. So the script emails you a copy every week.
 
-- **Every Sunday, early morning**, a copy is saved in your Google Drive, in a folder called **Prism backups**, named like `Prism Production backup 2026-11-22`.
-- **The newest 8 copies are kept** (about two months). Older ones go to the Drive bin.
-- **To make one right now:** **Prism → Back up this sheet now**.
+- **Every Sunday, early morning**, an email arrives at your **Report email** address with the **Entries, Materials, Recipes, Workers and Categories** tabs attached as CSV files. The subject says the date and how many entries are in it.
+- **To get one right now:** **Prism → Email a backup now**.
 - **To check it's working:** the **Settings** tab has a **Last backup** row, filled in automatically.
-- **To restore one:** open the backup in Drive and use **File → Make a copy**, or copy the rows you need back into the live Sheet. The backups are ordinary Google Sheets.
+- **To restore:** open a blank Google Sheet and use **File → Import → Upload** with the CSV file, or just open the file and paste the text in.
+- **Keep the emails.** They are the backup. Don't delete them to save space; a year of a small factory is only a few MB.
+
+**Why email and not Google Drive?** Copying a file in Drive makes Google ask for permission to *"see, edit, create and delete all of your Google Drive files"* — far more than a backup is worth, and more than you should hand to any script. Sending email is already allowed for the daily report, so backups cost no new permission at all.
+
+**Not included on purpose:** the **Settings** tab, because it holds your secret key, and the **Material Use** and **Stock** tabs, because the script works those out from the entries.
 
 ---
 
@@ -134,9 +138,9 @@ When you get a new `Code.gs`:
 
 The link stays the same, so nothing changes on the phones.
 
-**Did the new version really go live?** On a phone that's connected, open **⚙ Settings**. Under **Google Sheet** it now says either *"Sheet script version 0.3.0 · same as the app"* or a warning telling you the Sheet is still running an older one. (Tap **Send now** first if it hasn't synced lately.) You can also open the web app link in a browser: it prints the version it's running.
+**Did the new version really go live?** On a phone that's connected, open **⚙ Settings**. Under **Google Sheet** it now says either *"Sheet script version 0.3.1 · same as the app"* or a warning telling you the Sheet is still running an older one. (Tap **Send now** first if it hasn't synced lately.) You can also open the web app link in a browser: it prints the version it's running.
 
-> **One-time, when updating to 0.3.0:** this version saves a weekly backup, so Google needs **one new permission** (to put a copy in your Drive). Step 4 above is what asks for it — **do not skip it**. Until you do, the hourly job that sends the daily email may stop with an authorisation error. You'll see the same "Google hasn't verified this app" screen as the first time: **Advanced → Go to … → Allow**.
+> **Google should not ask you for any new permission.** The script only uses what you allowed the first time. If a screen appears asking to *"see, edit, create and delete all of your Google Drive files"*, you are pasting an old 0.3.0 copy — **click Cancel** and paste the current `Code.gs` instead. Prism never needs access to your Drive.
 
 ## Limits worth knowing
 

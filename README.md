@@ -115,7 +115,7 @@ The app works offline after the first open, and new versions reach phones automa
 - **What stays on each phone:** the last ~2 months of sent entries, plus anything not yet sent.
 - **Two copies of the app open at once** (Prism and Prism Admin, or two tabs) share the same saved entries instead of overwriting each other.
 - **Entries leave the phone even with the app shut** on Android Chrome, as soon as there is signal. iPhones send when the app is opened.
-- **The Sheet copies itself to Google Drive every Sunday**, newest 8 kept, so the only long-term copy isn't the only copy.
+- **The Sheet emails itself to you every Sunday** as CSV files, so the only long-term copy isn't the only copy. It needs no access to your Google Drive.
 - **Adding or removing stock, and alert levels, need the owner PIN,** even though anyone with the link can open `/admin`.
 
 ## Not in this version

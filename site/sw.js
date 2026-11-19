@@ -1,6 +1,6 @@
 // Offline support. Answers from the saved copy first, so the app opens at once even
 // on a weak signal, and fetches a fresh copy quietly for the next open.
-const VERSION = 'prism-20261119-123505'; // tools/make_website.py stamps a new value for each upload
+const VERSION = 'prism-20261119-201522'; // tools/make_website.py stamps a new value for each upload
 // Pages use their clean addresses ('./' and './admin'); Cloudflare redirects the .html names,
 // and a saved redirect can't be used to open a page offline.
 const SEND_TAG = 'prism-send';

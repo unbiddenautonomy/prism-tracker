@@ -970,7 +970,7 @@ function renderReportText(model, lang) {
 // and sends the daily email. Functions ending in "_" are internal.
 // ===================================================================
 
-const PRISM_VERSION = '0.3.0';
+const PRISM_VERSION = '0.3.1';
 
 const TAB = {
   materials: 'Materials',
@@ -1031,11 +1031,9 @@ const SETTING_ROWS = [
   ['Owner PIN', '', 'PIN that opens Settings on the phones.'],
   ['App name', '', 'Shown in the app and the email.'],
   ['Last report sent', '', 'Filled in automatically. Clear it to send today\'s email again.'],
-  ['Last backup', '', 'Filled in automatically when the weekly copy of this sheet is saved in Drive.'],
+  ['Last backup', '', 'Filled in automatically when the weekly backup email is sent.'],
 ];
 
-const BACKUP_FOLDER = 'Prism backups';
-const KEEP_BACKUPS = 8;
 
 // ---------------- helpers ----------------
 
@@ -1786,46 +1784,79 @@ function handleSync_(req) {
 
 // ---------------- weekly backup ----------------
 // This sheet is the only long-term copy of every entry: the phones keep about two
-// months and cannot send them again. So a dated copy is saved in Drive once a week.
+// months and cannot send them again. So once a week the tabs that cannot be worked
+// out again are emailed as CSV files.
+//
+// On purpose this does NOT use Drive. Copying a file in Drive makes Google ask the
+// owner for "see, edit, create and delete ALL of your Drive files", which is far
+// more than a backup is worth. Sending email is already allowed for the daily
+// report, so this asks for nothing new.
 
-function backupFolder_() {
-  const found = DriveApp.getFoldersByName(BACKUP_FOLDER);
-  return found.hasNext() ? found.next() : DriveApp.createFolder(BACKUP_FOLDER);
+// Material Use and Stock are left out: the script works both out from Entries.
+// Settings is left out as well, because it holds the secret key.
+const BACKUP_TABS = ['entries', 'materials', 'recipes', 'workers', 'categories'];
+
+function csvCell_(v) {
+  const s = str_(v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
-// Keeps the newest KEEP_BACKUPS copies and bins the rest. Returns how many are kept.
-function pruneBackups_(folder) {
-  const files = [];
-  const all = folder.getFiles();
-  while (all.hasNext()) {
-    const f = all.next();
-    files.push({ file: f, at: f.getDateCreated().getTime() });
-  }
-  files.sort(function (a, b) {
-    return b.at - a.at;
-  });
-  for (let i = KEEP_BACKUPS; i < files.length; i++) files[i].file.setTrashed(true);
-  return Math.min(files.length, KEEP_BACKUPS);
+function sheetCsv_(sh) {
+  return sh
+    .getDataRange()
+    .getValues()
+    .map(function (row) {
+      return row.map(csvCell_).join(',');
+    })
+    .join('\n');
 }
 
 function weeklyBackup() {
   const ss = getSS_();
-  const folder = backupFolder_();
-  const name = ss.getName() + ' backup ' + todayText_();
-  // Running twice on one day shouldn't leave two copies of that day.
-  const same = folder.getFilesByName(name);
-  while (same.hasNext()) same.next().setTrashed(true);
-  DriveApp.getFileById(ss.getId()).makeCopy(name, folder);
-  const kept = pruneBackups_(folder);
+  const s = readSettings_();
+  const config = readConfig_();
+  const stamp = todayText_();
+  const files = [];
+  BACKUP_TABS.forEach(function (key) {
+    const sh = ss.getSheetByName(TAB[key]);
+    if (!sh || sh.getLastRow() < 1) return;
+    files.push(Utilities.newBlob(sheetCsv_(sh), 'text/csv', TAB[key].replace(/\s+/g, '-') + '-' + stamp + '.csv'));
+  });
+  if (!files.length) return '';
+  const entries = ss.getSheetByName(TAB.entries);
+  const count = entries && entries.getLastRow() > 1 ? entries.getLastRow() - 1 : 0;
+  const to = s.email || Session.getEffectiveUser().getEmail();
+  const lines = [
+    config.appName + ' backup - ' + stamp,
+    '',
+    'Attached are the tabs of your sheet that cannot be worked out again,',
+    'as CSV files: ' + count + ' entries, plus the materials, recipes and workers.',
+    '',
+    'Keep this email. To put the data back into a sheet, open the CSV file and use',
+    'File > Import > Upload, or open a blank sheet and paste the text in.',
+    '',
+    'The secret key is not in here, and neither are the Material Use or Stock tabs:',
+    'the script works those out from the entries by itself.',
+  ];
+  MailApp.sendEmail({
+    to: to,
+    subject: config.appName + ' backup - ' + stamp + ' (' + count + ' entries)',
+    body: lines.join('\n'),
+    attachments: files,
+    name: config.appName + ' tracker',
+  });
   setSetting_('Last backup', nowText_());
-  Logger.log('Backup saved: ' + name + ' (' + kept + ' kept)');
-  return name;
+  Logger.log('Backup emailed to ' + to + ' (' + files.length + ' files, ' + count + ' entries)');
+  return stamp;
 }
 
-// Menu: Prism > Back up this sheet now
+// Menu: Prism > Email a backup now
 function backUpNow() {
-  notify_('Saved in Google Drive, in the folder "' + BACKUP_FOLDER + '":\n\n' + weeklyBackup() +
-    '\n\nThe newest ' + KEEP_BACKUPS + ' copies are kept. A copy is saved by itself every Sunday.');
+  const stamp = weeklyBackup();
+  notify_(stamp
+    ? 'Backup emailed to ' + (readSettings_().email || Session.getEffectiveUser().getEmail()) +
+      '.\n\nIt has the entries, materials, recipes and workers as CSV files.\nOne is sent by itself every Sunday. Keep the emails.'
+    : 'Nothing to back up yet.');
 }
 
 // ---------------- daily email ----------------
@@ -1886,7 +1917,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Prism')
     .addItem('Send today\'s report now', 'sendReportNow')
-    .addItem('Back up this sheet now', 'backUpNow')
+    .addItem('Email a backup now', 'backUpNow')
     .addItem('Show secret key', 'showSecretKey')
     .addSeparator()
     .addItem('Set up / repair this sheet', 'setup')
@@ -2054,7 +2085,7 @@ function setup() {
     'Secret key: ' + s.key + '\n' +
     'Time zone: ' + ss.getSpreadsheetTimeZone() + '\n' +
     'Daily email: after ' + s.hour + ':00 to ' + (s.email || Session.getEffectiveUser().getEmail()) + '\n' +
-    'Backup: every Sunday into the Drive folder "' + BACKUP_FOLDER + '", newest ' + KEEP_BACKUPS + ' kept\n\n' +
+    'Backup: emailed every Sunday, as CSV files\n\n' +
     'Next: Deploy > New deployment > Web app (see SETUP.md).';
   notify_(msg);
   return msg;

@@ -2,7 +2,7 @@
 // Entries wait on the phone until the sheet confirms it has them.
 import * as store from './store.js';
 
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.3.1';
 const BATCH_SIZE = 200;
 const TIMEOUT_MS = 25000;
 const STUCK_MS = 60 * 60 * 1000; // failing this long while the phone has internet is a real problem

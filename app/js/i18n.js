@@ -143,6 +143,7 @@ const STRINGS = {
     setVersion: 'App version {v}',
     setSheetVersion: 'Sheet script version {v} · same as the app',
     setSheetOld: 'The Sheet is running script version {v}, but the app is {a}. Paste the latest Code.gs into the Sheet, then Deploy → Manage deployments → Edit → Version: New version.',
+    setSheetUnknown: 'The Sheet is running a script older than {a}. Paste the latest Code.gs into the Sheet, then Deploy → Manage deployments → Edit → Version: New version.',
 
     reportAll: 'All phones · from the Google Sheet',
     reportPhone: 'This phone only · sheet not connected',
@@ -357,6 +358,7 @@ const STRINGS = {
     setVersion: 'ऐप वर्ज़न {v}',
     setSheetVersion: 'शीट स्क्रिप्ट वर्ज़न {v} · ऐप जैसा ही',
     setSheetOld: 'शीट में स्क्रिप्ट वर्ज़न {v} चल रहा है, ऐप {a} है। नया Code.gs शीट में पेस्ट करें, फिर Deploy → Manage deployments → Edit → Version: New version करें।',
+    setSheetUnknown: 'शीट में {a} से पुरानी स्क्रिप्ट चल रही है। नया Code.gs शीट में पेस्ट करें, फिर Deploy → Manage deployments → Edit → Version: New version करें।',
 
     reportAll: 'सभी फ़ोन · गूगल शीट से',
     reportPhone: 'सिर्फ़ यह फ़ोन · शीट नहीं जुड़ी',

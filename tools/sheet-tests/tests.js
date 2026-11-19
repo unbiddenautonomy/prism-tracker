@@ -355,24 +355,37 @@ check('only a phone seen in the last week is warned about', (phoneHtml.match(/NO
 check('the long-gone phone is still listed, just not warned about', phoneHtml.indexOf('Old phone') >= 0);
 check('the plain-text report warns about the same one only', (renderReportText(phoneModel, 'en').match(/NOT sent today/g) || []).length === 1);
 
-// 22. the weekly backup of the whole sheet
-var bName = weeklyBackup();
-check('a dated copy of the sheet is made', bName === 'Prism Production backup ' + today, bName);
-check('it lands in the Prism backups folder', __folders.length === 1 && __folders[0].name === 'Prism backups' && __folders[0].live().length === 1, __folders.map(function (f) { return f.name; }));
+// 22. the weekly backup, emailed as CSV so it needs no Drive permission
+var mailBeforeBackup = __mail.length;
+var bStamp = weeklyBackup();
+check('a backup is sent', bStamp === today && __mail.length === mailBeforeBackup + 1, [bStamp, __mail.length - mailBeforeBackup]);
+var backupMail = __mail[__mail.length - 1];
+check('its subject says the day and how many entries', /backup - \d{4}-\d{2}-\d{2} \(\d+ entries\)$/.test(backupMail.subject), backupMail.subject);
+var attached = (backupMail.attachments || []).map(function (f) { return f.getName(); });
+check('the tabs that cannot be worked out again are attached',
+  attached.length === 5 && attached.some(function (n) { return n.indexOf('Entries-') === 0; }) && attached.some(function (n) { return n.indexOf('Recipes-') === 0; }) &&
+  attached.some(function (n) { return n.indexOf('Materials-') === 0; }) && attached.some(function (n) { return n.indexOf('Workers-') === 0; }) &&
+  attached.some(function (n) { return n.indexOf('Categories-') === 0; }), attached);
+check('the derived tabs are NOT attached', !attached.some(function (n) { return /^(Material-Use|Stock)-/.test(n); }), attached);
+check('the secret key is nowhere in the backup',
+  !attached.some(function (n) { return n.indexOf('Settings-') === 0; }) &&
+  (backupMail.attachments || []).every(function (f) { return f.getDataAsString().indexOf(s.key) < 0; }) &&
+  backupMail.body.indexOf(s.key) < 0);
+var entriesCsv = (backupMail.attachments || []).filter(function (f) { return f.getName().indexOf('Entries-') === 0; })[0].getDataAsString();
+check('the entries CSV has a header row and one line per entry',
+  entriesCsv.split('\n')[0].indexOf('Date,Time,Type') === 0 && entriesCsv.split('\n').length === sheet('Entries').getLastRow(),
+  [entriesCsv.split('\n')[0].slice(0, 20), entriesCsv.split('\n').length, sheet('Entries').getLastRow()]);
+check('a comma or a quote in a note cannot break the columns',
+  csvCell_('spill, then "mopped"') === '"spill, then ""mopped"""', csvCell_('spill, then "mopped"'));
+check('a note with a comma survives the round trip', (function () {
+  var row = ['x,y', 'he said "hi"', 'plain'];
+  return row.map(csvCell_).join(',') === '"x,y","he said ""hi""",plain';
+})());
 check('the backup time is recorded in Settings', /^\d{4}-\d{2}-\d{2} /.test(readSettings_().lastBackup || ''), readSettings_().lastBackup);
-weeklyBackup();
-check('running it twice in a day leaves one copy', __folders[0].live().length === 1, __folders[0].live().map(function (f) { return f.name; }));
-for (var bi = 0; bi < 12; bi++) {
-  var older = new FakeDriveFile('Prism Production backup old-' + bi, __folders[0]);
-  older.created = new Date(2025, 0, 1, 0, 0, bi); // genuinely older than the copy just made
-  __folders[0].files.push(older);
-}
-check('13 copies before pruning', __folders[0].live().length === 13, __folders[0].live().length);
-check('pruning keeps the newest 8', pruneBackups_(__folders[0]) === 8 && __folders[0].live().length === 8, __folders[0].live().length);
-check('the newest copy is one of the keepers', __folders[0].live().some(function (f) { return f.name === bName; }));
+check('the backup asks for no Drive access', typeof DriveApp === 'undefined');
 setup();
-check('setup keeps exactly one of each trigger', __triggers.filter(function (t) { return t.fn === 'weeklyBackup'; }).length === 1 && __triggers.filter(function (t) { return t.fn === 'hourlyCheck'; }).length === 1, __triggers.map(function (t) { return t.fn; }));
-check('the weekly backup runs on a Sunday', __triggers.filter(function (t) { return t.fn === 'weeklyBackup'; })[0].day === 'SUNDAY');
+check('setup keeps one of each trigger', __triggers.filter(function (t) { return t.fn === 'weeklyBackup'; }).length === 1 && __triggers.filter(function (t) { return t.fn === 'hourlyCheck'; }).length === 1, __triggers.map(function (t) { return t.fn; }));
+check('the backup runs on a Sunday', __triggers.filter(function (t) { return t.fn === 'weeklyBackup'; })[0].day === 'SUNDAY');
 
 // 23. the admin app adding, changing and removing products
 function productIn(res, name) { return (res.config.products || []).filter(function (p) { return p.name === name; })[0]; }

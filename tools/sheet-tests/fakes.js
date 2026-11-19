@@ -123,6 +123,9 @@ var Utilities = {
     throw new Error('pattern ' + pattern);
   },
   getUuid: function () { return 'abcd1234-ef56-7890-abcd-ef1234567890'; },
+  newBlob: function (content, type, name) {
+    return { content: content, type: type, name: name, getName: function () { return this.name; }, getDataAsString: function () { return this.content; } };
+  },
 };
 var PropertiesService = { getScriptProperties: function () { return { setProperty: function (k, v) { __props[k] = v; }, getProperty: function (k) { return __props[k] || null; } }; } };
 var ScriptApp = {
@@ -146,36 +149,6 @@ var ScriptApp = {
   },
 };
 
-// ---- Drive, for the weekly backup ----
-var __folders = [];
-var __driveSeq = 0;
-function __iter(arr) {
-  var i = 0;
-  return { hasNext: function () { return i < arr.length; }, next: function () { return arr[i++]; } };
-}
-function FakeDriveFile(name, folder) {
-  this.name = name; this.folder = folder; this.trashed = false;
-  this.created = new Date(2026, 0, 1, 0, 0, __driveSeq++); // later copies look newer
-}
-FakeDriveFile.prototype.getName = function () { return this.name; };
-FakeDriveFile.prototype.getDateCreated = function () { return this.created; };
-FakeDriveFile.prototype.setTrashed = function (v) { this.trashed = v; return this; };
-FakeDriveFile.prototype.makeCopy = function (name, folder) {
-  var f = new FakeDriveFile(name, folder);
-  folder.files.push(f);
-  return f;
-};
-function FakeFolder(name) { this.name = name; this.files = []; }
-FakeFolder.prototype.getName = function () { return this.name; };
-FakeFolder.prototype.live = function () { return this.files.filter(function (f) { return !f.trashed; }); };
-FakeFolder.prototype.getFiles = function () { return __iter(this.live()); };
-FakeFolder.prototype.getFilesByName = function (n) { return __iter(this.live().filter(function (f) { return f.name === n; })); };
-var __ssFile = new FakeDriveFile('Prism Production', null);
-var DriveApp = {
-  getFoldersByName: function (n) { return __iter(__folders.filter(function (f) { return f.name === n; })); },
-  createFolder: function (n) { var f = new FakeFolder(n); __folders.push(f); return f; },
-  getFileById: function () { return __ssFile; },
-};
 var MailApp = { sendEmail: function (o) { __mail.push(o); } };
 var Session = { getEffectiveUser: function () { return { getEmail: function () { return 'owner@example.com'; } }; } };
 var Logger = { log: function (m) { console.log('[Logger] ' + m); } };

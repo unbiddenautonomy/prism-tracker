@@ -24,6 +24,9 @@ DATA_DIR = os.path.join(ROOT, "dev-data")
 DB_PATH = os.path.join(DATA_DIR, "mock-sheet.json")
 MOCK_CONFIG_PATH = os.path.join(DATA_DIR, "mock-config.json")
 TEST_KEY = "test-key"
+# What the pretend sheet claims its Code.gs is. Set PRISM_FAKE_VERSION to something
+# older to see what the app does when the Sheet script is behind.
+FAKE_VERSION = os.environ.get("PRISM_FAKE_VERSION", "0.3.1")
 
 LOCK = threading.Lock()
 STATE = {"offline": False}
@@ -154,7 +157,7 @@ def handle_mock(req):
             if phone:
                 db["phones"][phone] = {"phone": phone, "lastSync": now_text(), "worker": req.get("worker", ""), "appVersion": req.get("appVersion", "")}
             save_db(db)
-        return {"ok": True, "saved": saved, "config": sheet_config(db), "serverTime": datetime.datetime.utcnow().isoformat() + "Z"}
+        return {"ok": True, "saved": saved, "config": sheet_config(db), "version": FAKE_VERSION, "serverTime": datetime.datetime.utcnow().isoformat() + "Z"}
     if action == "report":
         day = str(req.get("day") or datetime.date.today().isoformat())
         month = day[:7]
