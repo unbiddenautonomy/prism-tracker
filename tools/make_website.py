@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
 """Builds the website copy of the app for Cloudflare Pages.
 
-    python3 tools/make_website.py          normal: no recipes on the website
-    python3 tools/make_website.py --demo   demo: includes the products from
-                                           app/config.json (samples only!)
+    python3 tools/make_website.py
 
 Makes:
   site/                 the files to upload
   prism-website.zip     the same files zipped (Cloudflare accepts the zip)
 
-Safety: every file on a website can be downloaded by anyone who has the link,
-so the website copy of config.json has NO recipes and NO secret key.
-Phones get the recipes from the Google Sheet after the key is entered once
-in Settings.
+Safety: every file on a website can be downloaded by anyone who has the link.
+So the website copy of config.json NEVER has the recipes, the worker names or
+the secret key, and there is no switch to put them there. Phones receive all
+three from the Google Sheet once the key is entered in Settings, and the admin
+app's Recipes screen is where products are added and changed.
 """
 import json
 import os
 import shutil
-import sys
 import time
 import zipfile
 
@@ -46,7 +44,6 @@ HEADERS = """/*
 
 
 def main():
-    demo = "--demo" in sys.argv[1:]
     if os.path.exists(SITE):
         shutil.rmtree(SITE)
     shutil.copytree(APP, SITE, ignore=shutil.ignore_patterns(".DS_Store", "*.tmp"))
@@ -56,17 +53,16 @@ def main():
     with open(path, encoding="utf-8") as f:
         cfg = json.load(f)
     safe = {
-        "_help": ("DEMO website copy: contains SAMPLE recipes only. Worker names and the Sheet key are never here." if demo else
-                  "Website copy. Recipes, worker names and the Sheet key are NOT here on purpose: phones receive them from the Google Sheet after the key is entered once in Settings."),
+        "_help": "Website copy. The recipes, the worker names and the Sheet key are NOT here on purpose: anyone with the link can download this file. Phones receive all three from the Google Sheet once the key is entered in Settings.",
         "appName": cfg.get("appName", "Prism"),
         "ownerPin": cfg.get("ownerPin", "1234"),
         "sheet": {"url": "", "key": ""},
         "categoryColors": cfg.get("categoryColors", {}),
+        # Raw material codes only: they are on the phones' own screens anyway.
         "materials": cfg.get("materials", []),
-        # Demo builds show the sample products so the app can be shown without the Sheet.
-        "products": cfg.get("products", []) if demo else [],
-        # Real names never go on a public address, demo or not. Phones read them from
-        # the Sheet once connected; until then a worker types their name once.
+        # Never published. Products come from the Sheet, and the admin app's
+        # Recipes screen is where they are added and changed.
+        "products": [],
         "workers": [],
     }
     with open(path, "w", encoding="utf-8") as f:
@@ -91,7 +87,7 @@ def main():
     # 4. final safety check
     with open(path, encoding="utf-8") as f:
         check = json.load(f)
-    assert demo or not check["products"], "recipes must not be on the website"
+    assert not check["products"], "recipes must not be on the website"
     assert not check["workers"], "worker names must not be on the website"
     assert not check["sheet"]["key"], "the secret key must not be on the website"
 
@@ -107,12 +103,7 @@ def main():
                 count += 1
     size_kb = os.path.getsize(ZIP) // 1024
     print("Website ready: site/ (%d files), prism-website.zip (%d KB), version %s" % (count, size_kb, version))
-    if demo:
-        print("DEMO build: the %d sample products ARE included: %s" % (len(check["products"]), ", ".join(p["name"] for p in check["products"])))
-        print("Once real recipes go in, build again WITHOUT --demo.")
-    else:
-        print("Recipes: not included.")
-    print("Secret key: not included.")
+    print("Not included, and cannot be: recipes, worker names, secret key.")
 
 
 if __name__ == "__main__":

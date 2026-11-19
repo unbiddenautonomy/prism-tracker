@@ -35,7 +35,6 @@ The project is in the private GitHub repository **unbiddenautonomy/prism-tracker
    ```bash
    python3 tools/make_website.py
    ```
-   Add `--demo` to include the sample products.
 2. Save and push:
    ```bash
    git add -A && git commit -m "What changed" && git push
@@ -106,10 +105,8 @@ Admins on Android can do the same in Chrome with the `/admin` link.
 - **"Sheet problem · tell your supervisor":** the key is wrong or the Sheet's columns were changed. Entries wait safely on the phone until it's fixed.
 - **Products missing:** the phone isn't connected to the Sheet yet (see B4 / C4), or the Recipes tab is empty.
 
-## Showing a demo (sample products on the website)
+## Why the website has no recipes
 
-```bash
-python3 tools/make_website.py --demo
-```
+Every file on a website can be downloaded by anyone who has the address, and a recipe is the one thing in Prism worth stealing. So the published copy never contains the recipes, the worker names or the secret key — and there is no switch to put them there.
 
-This puts the **sample** products from `app/config.json` (currently Y111, Y48 and Pink7) on the website, so the app can be shown without the Google Sheet. Only use it with samples. Once real recipes are in the Sheet, build again **without** `--demo` and upload that.
+Phones get all three from the Google Sheet the moment the key is entered in Settings, and products are added and changed in **Prism Admin → Recipes**. Nothing about the recipes is ever part of an upload, so there is no build step to get wrong.

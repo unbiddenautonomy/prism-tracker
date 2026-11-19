@@ -1,5 +1,5 @@
 {
-  "_help": "DEMO website copy: contains SAMPLE recipes only. Worker names and the Sheet key are never here.",
+  "_help": "Website copy. The recipes, the worker names and the Sheet key are NOT here on purpose: anyone with the link can download this file. Phones receive all three from the Google Sheet once the key is entered in Settings.",
   "appName": "Prism",
   "ownerPin": "1234",
   "sheet": {
@@ -84,46 +84,6 @@
       "color": "#A855F7"
     }
   ],
-  "products": [
-    {
-      "name": "Y111",
-      "name_hi": "Y111",
-      "batchNote": "Sample · 1 batch = 1 kg",
-      "batchNote_hi": "नमूना · 1 बैच = 1 kg",
-      "category": "",
-      "color": "#FFD23F",
-      "recipe": {
-        "Y1": 0.8,
-        "Y5": 0.3,
-        "P2": 0.1
-      }
-    },
-    {
-      "name": "Y48",
-      "name_hi": "Y48",
-      "batchNote": "Sample · 1 batch = 1 kg",
-      "batchNote_hi": "नमूना · 1 बैच = 1 kg",
-      "category": "",
-      "color": "#FF9F00",
-      "recipe": {
-        "Y1": 0.5,
-        "Y5": 0.5,
-        "P2": 0.2
-      }
-    },
-    {
-      "name": "Pink7",
-      "name_hi": "Pink7",
-      "batchNote": "Sample · 1 batch = 1 kg",
-      "batchNote_hi": "नमूना · 1 बैच = 1 kg",
-      "category": "",
-      "color": "#FF4D8D",
-      "recipe": {
-        "R1": 0.6,
-        "S1": 0.2,
-        "S2": 0.4
-      }
-    }
-  ],
+  "products": [],
   "workers": []
 }

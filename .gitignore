@@ -9,4 +9,4 @@ prism-website.zip
 .wrangler/
 
 # site/ IS saved on purpose: Cloudflare publishes it straight from GitHub.
-# Build it with:  python3 tools/make_website.py   (add --demo for sample products)
+# Build it with:  python3 tools/make_website.py
