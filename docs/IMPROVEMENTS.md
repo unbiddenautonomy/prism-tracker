@@ -6,7 +6,7 @@ Reviewed 18 Nov 2026 (app 0.2.0). **Fixes applied 19 Nov 2026** — see below.
 
 The review found 22 things worth changing. **Fifteen have now been fixed**, including all three of the most serious: entries could be lost when two copies of the app were open, the app took about 20 seconds to open on a weak signal, and correcting a number in the Google Sheet left the raw material totals and stock wrong. All three were reproduced before the fix and checked again after.
 
-Seven things are still open. None of them loses data; they are mostly about catching up later (a daily email that is only a snapshot, no second copy of the Sheet, no automatic test of the phone screens). The two worth doing next are a **weekly backup of the Sheet** and **sending entries in the background** so a phone left in a pocket doesn't hold them.
+Eight things are still open. None of them loses data; they are mostly about catching up later (a daily email that is only a snapshot, no second copy of the Sheet, no automatic test of the phone screens). The two worth doing next are a **weekly backup of the Sheet** and **sending entries in the background** so a phone left in a pocket doesn't hold them.
 
 Checks that run on this machine: `bash tools/sheet-tests/run.sh` — **139 checks pass** (115 before, 24 added for the new behaviour).
 
