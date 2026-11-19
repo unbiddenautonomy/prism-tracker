@@ -32,6 +32,15 @@ function field(label, input) {
   return h('label', { class: 'field' }, h('span', { class: 'label' }, label), input);
 }
 
+// Which Code.gs the sheet is actually running. Different from the app's own version
+// means the new script was pasted but "New version" was missed on the deployment.
+function sheetVersionNote(conn, s) {
+  const v = String(s.sheetVersion || '');
+  if (!conn.url || !v) return null;
+  if (v === sync.APP_VERSION) return h('p', { class: 'hint' }, t('setSheetVersion', { v }));
+  return h('div', { class: 'warn-box' }, t('setSheetOld', { v, a: sync.APP_VERSION }));
+}
+
 function settingsBody() {
   const s = store.getSettings();
   const cfg = store.getConfig();
@@ -137,7 +146,8 @@ function settingsBody() {
         field(t('setSheetUrl'), urlInput),
         field(t('setSheetKey'), keyInput),
         result,
-        h('div', { class: 'stack' }, sheetButtons)
+        h('div', { class: 'stack' }, sheetButtons),
+        sheetVersionNote(conn, s)
       ),
       section(
         'flask',

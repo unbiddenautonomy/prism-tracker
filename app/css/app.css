@@ -610,3 +610,9 @@ svg.ic { flex: none; display: block; }
 
 /* Captions in the report: never under 13px, so they stay readable on a cheap phone. */
 .rrow-name small, .rrow-val small { font-size: 0.8125rem; }
+
+/* Recipes screen: one row per raw material, amount used in a single batch. */
+.recipe-row { grid-template-columns: minmax(0, 1fr) 7.5rem auto; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.recipe-row:last-child { border-bottom: none; }
+.recipe-row .stock-code { font-size: 1.0625rem; font-weight: 600; gap: 8px; }
+.recipe-row .stock-code small { font-size: 0.8125rem; font-weight: 500; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

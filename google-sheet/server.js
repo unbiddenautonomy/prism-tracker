@@ -4,7 +4,7 @@
 // and sends the daily email. Functions ending in "_" are internal.
 // ===================================================================
 
-const PRISM_VERSION = '0.2.0';
+const PRISM_VERSION = '0.3.0';
 
 const TAB = {
   materials: 'Materials',
@@ -65,7 +65,11 @@ const SETTING_ROWS = [
   ['Owner PIN', '', 'PIN that opens Settings on the phones.'],
   ['App name', '', 'Shown in the app and the email.'],
   ['Last report sent', '', 'Filled in automatically. Clear it to send today\'s email again.'],
+  ['Last backup', '', 'Filled in automatically when the weekly copy of this sheet is saved in Drive.'],
 ];
+
+const BACKUP_FOLDER = 'Prism backups';
+const KEEP_BACKUPS = 8;
 
 // ---------------- helpers ----------------
 
@@ -178,6 +182,7 @@ function readSettings_() {
     pin: str_(map['Owner PIN']) || '1234',
     appName: str_(map['App name']) || 'Prism',
     lastSent: str_(map['Last report sent']),
+    lastBackup: str_(map['Last backup']),
   };
 }
 
@@ -619,6 +624,94 @@ function ensureLowStockHeader_(sh) {
   if (!str_(cell.getValue())) cell.setValue(MATERIAL_HEADERS[LOW_STOCK_COL - 1]).setFontWeight('bold').setBackground('#e2e8f0');
 }
 
+// ---------------- recipes (from the admin app) ----------------
+// The Recipes tab stays editable by hand in the sheet; these two let the admin app
+// do the same from a phone. Entries already recorded keep the amounts they were
+// recorded with, because each entry stores its own raw material lines.
+
+function recipeHeader_(sh) {
+  return sh.getRange(1, 1, 1, Math.max(RECIPE_FIXED.length, sh.getLastColumn())).getValues()[0].map(str_);
+}
+
+// Row number of a product (0 = not there), matched without worrying about capitals.
+function recipeRowOf_(sh, head, name) {
+  const nameCol = head.indexOf('Product');
+  if (nameCol < 0 || sh.getLastRow() < 2) return 0;
+  const names = sh.getRange(2, nameCol + 1, sh.getLastRow() - 1, 1).getValues();
+  const want = String(name).toLowerCase();
+  for (let i = 0; i < names.length; i++) {
+    if (str_(names[i][0]).toLowerCase() === want) return i + 2;
+  }
+  return 0;
+}
+
+function saveProduct_(req) {
+  const name = String(req.name == null ? '' : req.name).trim().slice(0, 120);
+  if (!name) return { ok: false, error: 'no-name' };
+  const recipe = req.recipe && typeof req.recipe === 'object' ? req.recipe : {};
+  const codes = Object.keys(recipe).filter((c) => str_(c));
+  let any = false;
+  for (let i = 0; i < codes.length; i++) {
+    const v = Number(recipe[codes[i]]);
+    if (isNaN(v) || v < 0) return { ok: false, error: 'bad-amount' };
+    if (v > 0) any = true;
+  }
+  if (!any) return { ok: false, error: 'no-amounts' };
+
+  const sh = getSS_().getSheetByName(TAB.recipes);
+  if (!sh) return { ok: false, error: 'no-recipes-tab' };
+  let head = recipeHeader_(sh);
+  if (head.indexOf('Product') < 0) return { ok: false, error: 'no-product-column' };
+  // A material with no column of its own gets one at the right-hand end.
+  codes.forEach((code) => {
+    if (head.indexOf(code) >= 0 || !(Number(recipe[code]) > 0)) return;
+    sh.getRange(1, head.length + 1).setValue(code).setFontWeight('bold').setBackground('#e2e8f0');
+    head = recipeHeader_(sh);
+  });
+
+  // Start from the row as it is, so anything the app doesn't send — a colour or a
+  // column the owner added themselves — is kept exactly as it was.
+  const at = recipeRowOf_(sh, head, name);
+  const row = at ? sh.getRange(at, 1, 1, head.length).getValues()[0] : [];
+  while (row.length < head.length) row.push('');
+  const set = (heading, value) => {
+    const j = head.indexOf(heading);
+    if (j >= 0) row[j] = value;
+  };
+  const text = (v, max) => String(v == null ? '' : v).trim().slice(0, max);
+  set('Product', name);
+  if ('name_hi' in req) set('Product (Hindi)', text(req.name_hi, 120));
+  if ('batchNote' in req) set('Batch note', text(req.batchNote, 120));
+  if ('batchNote_hi' in req) set('Batch note (Hindi)', text(req.batchNote_hi, 120));
+  if ('category' in req) set('Category', text(req.category, 60));
+  if ('color' in req) set('Color', cleanColor(req.color));
+  // Every material column is written, so an amount cleared in the app clears here.
+  head.forEach((heading, j) => {
+    if (!heading || RECIPE_FIXED.indexOf(heading) >= 0) return;
+    const v = Number(recipe[heading]) || 0;
+    row[j] = v > 0 ? v : '';
+  });
+
+  const textCols = [];
+  RECIPE_FIXED.forEach((heading) => {
+    const j = head.indexOf(heading);
+    if (j >= 0) textCols.push(j + 1);
+  });
+  writeRows_(sh, at || sh.getLastRow() + 1, [row], textCols);
+  return { ok: true, created: !at, config: readConfig_() };
+}
+
+function deleteProduct_(req) {
+  const name = String(req.name == null ? '' : req.name).trim();
+  if (!name) return { ok: false, error: 'no-name' };
+  const sh = getSS_().getSheetByName(TAB.recipes);
+  if (!sh) return { ok: false, error: 'no-recipes-tab' };
+  const at = recipeRowOf_(sh, recipeHeader_(sh), name);
+  if (!at) return { ok: false, error: 'unknown-product' };
+  sh.deleteRow(at);
+  return { ok: true, config: readConfig_() };
+}
+
 function touchPhone_(phone, worker, version) {
   const sh = getSS_().getSheetByName(TAB.phones);
   const row = [String(phone).slice(0, 60), nowText_(), String(worker || '').slice(0, 60), String(version || '').slice(0, 20)];
@@ -686,6 +779,14 @@ function doPost(e) {
       } finally {
         lock.releaseLock();
       }
+    } else if (req.action === 'saveProduct' || req.action === 'deleteProduct') {
+      const lock = LockService.getScriptLock();
+      if (!lock.tryLock(25000)) return json_({ ok: false, error: 'busy' });
+      try {
+        out = req.action === 'saveProduct' ? saveProduct_(req) : deleteProduct_(req);
+      } finally {
+        lock.releaseLock();
+      }
     } else {
       out = { ok: false, error: 'unknown-action' };
     }
@@ -714,7 +815,51 @@ function handleSync_(req) {
   } finally {
     lock.releaseLock();
   }
-  return { ok: true, saved, config: readConfig_(), serverTime: new Date().toISOString() };
+  return { ok: true, saved, config: readConfig_(), version: PRISM_VERSION, serverTime: new Date().toISOString() };
+}
+
+// ---------------- weekly backup ----------------
+// This sheet is the only long-term copy of every entry: the phones keep about two
+// months and cannot send them again. So a dated copy is saved in Drive once a week.
+
+function backupFolder_() {
+  const found = DriveApp.getFoldersByName(BACKUP_FOLDER);
+  return found.hasNext() ? found.next() : DriveApp.createFolder(BACKUP_FOLDER);
+}
+
+// Keeps the newest KEEP_BACKUPS copies and bins the rest. Returns how many are kept.
+function pruneBackups_(folder) {
+  const files = [];
+  const all = folder.getFiles();
+  while (all.hasNext()) {
+    const f = all.next();
+    files.push({ file: f, at: f.getDateCreated().getTime() });
+  }
+  files.sort(function (a, b) {
+    return b.at - a.at;
+  });
+  for (let i = KEEP_BACKUPS; i < files.length; i++) files[i].file.setTrashed(true);
+  return Math.min(files.length, KEEP_BACKUPS);
+}
+
+function weeklyBackup() {
+  const ss = getSS_();
+  const folder = backupFolder_();
+  const name = ss.getName() + ' backup ' + todayText_();
+  // Running twice on one day shouldn't leave two copies of that day.
+  const same = folder.getFilesByName(name);
+  while (same.hasNext()) same.next().setTrashed(true);
+  DriveApp.getFileById(ss.getId()).makeCopy(name, folder);
+  const kept = pruneBackups_(folder);
+  setSetting_('Last backup', nowText_());
+  Logger.log('Backup saved: ' + name + ' (' + kept + ' kept)');
+  return name;
+}
+
+// Menu: Prism > Back up this sheet now
+function backUpNow() {
+  notify_('Saved in Google Drive, in the folder "' + BACKUP_FOLDER + '":\n\n' + weeklyBackup() +
+    '\n\nThe newest ' + KEEP_BACKUPS + ' copies are kept. A copy is saved by itself every Sunday.');
 }
 
 // ---------------- daily email ----------------
@@ -775,6 +920,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Prism')
     .addItem('Send today\'s report now', 'sendReportNow')
+    .addItem('Back up this sheet now', 'backUpNow')
     .addItem('Show secret key', 'showSecretKey')
     .addSeparator()
     .addItem('Set up / repair this sheet', 'setup')
@@ -926,9 +1072,11 @@ function setup() {
   if (blank && blank.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(blank);
 
   ScriptApp.getProjectTriggers().forEach((t) => {
-    if (t.getHandlerFunction() === 'hourlyCheck') ScriptApp.deleteTrigger(t);
+    const fn = t.getHandlerFunction();
+    if (fn === 'hourlyCheck' || fn === 'weeklyBackup') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('hourlyCheck').timeBased().everyHours(1).create();
+  ScriptApp.newTrigger('weeklyBackup').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(3).create();
 
   const fixedCells = repairText_(ss);
   checkStock_();
@@ -939,7 +1087,8 @@ function setup() {
     (fixedCells ? 'Fixed garbled text in ' + fixedCells + ' cells.\n' : '') +
     'Secret key: ' + s.key + '\n' +
     'Time zone: ' + ss.getSpreadsheetTimeZone() + '\n' +
-    'Daily email: after ' + s.hour + ':00 to ' + (s.email || Session.getEffectiveUser().getEmail()) + '\n\n' +
+    'Daily email: after ' + s.hour + ':00 to ' + (s.email || Session.getEffectiveUser().getEmail()) + '\n' +
+    'Backup: every Sunday into the Drive folder "' + BACKUP_FOLDER + '", newest ' + KEEP_BACKUPS + ' kept\n\n' +
     'Next: Deploy > New deployment > Web app (see SETUP.md).';
   notify_(msg);
   return msg;

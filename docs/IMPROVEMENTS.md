@@ -4,11 +4,11 @@ Reviewed 18 Nov 2026 (app 0.2.0). **Fixes applied 19 Nov 2026** — see below.
 
 ## Summary
 
-The review found 22 things worth changing. **Fifteen have now been fixed**, including all three of the most serious: entries could be lost when two copies of the app were open, the app took about 20 seconds to open on a weak signal, and correcting a number in the Google Sheet left the raw material totals and stock wrong. All three were reproduced before the fix and checked again after.
+The review found 22 things worth changing. **Eighteen have now been fixed**, including all three of the most serious: entries could be lost when two copies of the app were open, the app took about 20 seconds to open on a weak signal, and correcting a number in the Google Sheet left the raw material totals and stock wrong. Each one was reproduced before the fix and checked again after.
 
-Eight things are still open. None of them loses data; they are mostly about catching up later (a daily email that is only a snapshot, no second copy of the Sheet, no automatic test of the phone screens). The two worth doing next are a **weekly backup of the Sheet** and **sending entries in the background** so a phone left in a pocket doesn't hold them.
+Five are still open, and none of them loses data. The Sheet now copies itself to Drive every week, and entries now leave a phone even with the app shut, so the two biggest gaps are closed. The admin app also gained a **Recipes screen**, so products and their amounts can be added and changed from the phone instead of only in the Sheet.
 
-Checks that run on this machine: `bash tools/sheet-tests/run.sh` — **139 checks pass** (115 before, 24 added for the new behaviour).
+Checks that run on this machine: `bash tools/sheet-tests/run.sh` — **169 checks pass** (115 before this work, 54 added).
 
 ## Fixed
 
@@ -29,34 +29,25 @@ Checks that run on this machine: `bash tools/sheet-tests/run.sh` — **139 check
 | 20 | "बैच बनाए" on the home button but "बैच बने" in the question and the report; a Hindi phone still started in English. | One name everywhere, and a phone set to Hindi opens in Hindi. Still worth having a native speaker read every line once. |
 | 21 | Back, light/dark, language (40 px) and Change (36 px) were under the 48 px minimum; the phone's Back button left the screen instead of closing the "Delete this entry?" box; labels were English-only. | All those buttons are at least 44–48 px, Back (and Escape) closes the box and stays put, the smallest report text is at least 13 px, and the screen-reader labels are translated. |
 | 22 | The website carried the workers' names and nothing kept it out of search engines. | No names in the published copy (phones read them from the Sheet), plus a "stay away" header and `robots.txt`. |
+| 7 | Entries only left a phone while the app was open on the screen. | Android Chrome now sends them with the app shut, as soon as there is signal, and the app ticks them off when it next opens. iPhones don't offer this, so there nothing changes. |
+| 9 | Nothing said when the Sheet script was older than the app — a forgotten "New version" on deploy was invisible. | Both carry a real version number (now 0.3.0). Settings shows the Sheet's and warns in plain words when it is behind. |
+| 13 | The Sheet was the only long-term copy, with no backup. | A dated copy is saved in a "Prism backups" folder in Drive every Sunday, newest 8 kept, with **Prism → Back up this sheet now** for one on demand. |
 
 ## Still open
 
 Effort: **S** = under a day, **M** = a few days, **L** = a week or more.
 
-**7. Entries only go to the sheet while the app is open on the screen. (Medium, M)**
-Sending runs on timers inside the page (`app/js/sync.js:121-131`); `app/sw.js` has no background sending. An entry saved without signal waits until someone opens the app again.
-→ Add background sync (Android Chrome supports it), or say plainly "open the app when you have signal".
-
 **8. The daily email is a one-time 8 pm snapshot. (Medium, S)**
 `google-sheet/server.js` sends once a day and marks the day done. Entries made or sent later never appear under "Today" in any email, and a day the timer misses is never sent.
 → Send yesterday's final report each morning as well, and catch up on missed days.
 
-**9. Nothing tells you when the Sheet script is older than the app. (Medium, S)**
-Forgetting "New version" when deploying leaves the old script running, and no screen shows it.
-→ Stamp a build number into both at build time, send it with every sync, and warn in Prism Admin when the Sheet's is older.
-
-**11. The phone screens have no automatic test. (Medium, M)**
-`tools/sheet-tests/` covers the Sheet script only. The fixes above were checked by hand with a real browser; nothing stops them breaking again.
-→ A small browser test set run on the Mac before each push (so it costs no build minutes): save a batch, the waste flow in both languages, offline then online, two copies open, stock numbers.
+**11. The phone screens have no automatic test. (Medium, M — deferred by the owner)**
+`tools/sheet-tests/` covers the Sheet script only. Everything on the phone was checked by driving a real browser, but that happens only when someone asks; nothing stops it breaking again.
+→ A small browser test set run before each push (so it costs no build minutes): save a batch, the waste flow in both languages, offline then online, two copies open, stock numbers, recipes. **Parked for a later discussion.**
 
 **12b. Stock rules are written three times, and a deleted entry isn't undone offline. (Medium, M)**
 `app/js/report.js`, `app/js/screens/stock.js` and `dev_server.py` each have their own copy. With no signal, deleting an entry the sheet already has leaves the old amount in the figure on screen (it corrects itself as soon as the phone is online).
 → One shared stock function used by the app, the sheet and the test server.
-
-**13. The Sheet is the only long-term copy, with no backup. (Medium, S)**
-Phones keep sent entries for 62 days (`app/js/store.js:12`) and have no way to send them again.
-→ A weekly automatic copy of the spreadsheet (keep the last 8), plus a "send everything on this phone again" button in Settings.
 
 **18. Every sync re-reads the whole Entries tab. (Low, M — not urgent)**
 `google-sheet/server.js` reads all entries on every sync and every hour. From the code, not timed on Google: it will slow down over the years.

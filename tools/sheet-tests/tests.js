@@ -24,9 +24,9 @@ check('3 sample products', rows('Recipes').length === 3);
 var s = readSettings_();
 check('secret key generated', s.key.length >= 16, s.key);
 check('PIN kept as text', s.pin === '1234', s.pin);
-check('one hourly trigger', __triggers.length === 1 && __triggers[0].fn === 'hourlyCheck');
+check('hourly + weekly triggers', __triggers.length === 2 && __triggers.some(function (t) { return t.fn === 'hourlyCheck'; }) && __triggers.some(function (t) { return t.fn === 'weeklyBackup'; }), __triggers.map(function (t) { return t.fn; }));
 setup(); // running again must not duplicate anything
-check('setup is safe to re-run', rows('Materials').length === 9 && rows('Recipes').length === 3 && __triggers.length === 1 && rows('Settings').length === 6);
+check('setup is safe to re-run', rows('Materials').length === 9 && rows('Recipes').length === 3 && __triggers.length === 2 && rows('Settings').length === 7, [rows('Settings').length, __triggers.length]);
 
 var seeded = readConfig_().products;
 check('sample products seeded with recipes',
@@ -354,5 +354,77 @@ var phoneHtml = renderReportHtml(phoneModel, 'en');
 check('only a phone seen in the last week is warned about', (phoneHtml.match(/NOT sent today/g) || []).length === 1, (phoneHtml.match(/NOT sent today/g) || []).length);
 check('the long-gone phone is still listed, just not warned about', phoneHtml.indexOf('Old phone') >= 0);
 check('the plain-text report warns about the same one only', (renderReportText(phoneModel, 'en').match(/NOT sent today/g) || []).length === 1);
+
+// 22. the weekly backup of the whole sheet
+var bName = weeklyBackup();
+check('a dated copy of the sheet is made', bName === 'Prism Production backup ' + today, bName);
+check('it lands in the Prism backups folder', __folders.length === 1 && __folders[0].name === 'Prism backups' && __folders[0].live().length === 1, __folders.map(function (f) { return f.name; }));
+check('the backup time is recorded in Settings', /^\d{4}-\d{2}-\d{2} /.test(readSettings_().lastBackup || ''), readSettings_().lastBackup);
+weeklyBackup();
+check('running it twice in a day leaves one copy', __folders[0].live().length === 1, __folders[0].live().map(function (f) { return f.name; }));
+for (var bi = 0; bi < 12; bi++) {
+  var older = new FakeDriveFile('Prism Production backup old-' + bi, __folders[0]);
+  older.created = new Date(2025, 0, 1, 0, 0, bi); // genuinely older than the copy just made
+  __folders[0].files.push(older);
+}
+check('13 copies before pruning', __folders[0].live().length === 13, __folders[0].live().length);
+check('pruning keeps the newest 8', pruneBackups_(__folders[0]) === 8 && __folders[0].live().length === 8, __folders[0].live().length);
+check('the newest copy is one of the keepers', __folders[0].live().some(function (f) { return f.name === bName; }));
+setup();
+check('setup keeps exactly one of each trigger', __triggers.filter(function (t) { return t.fn === 'weeklyBackup'; }).length === 1 && __triggers.filter(function (t) { return t.fn === 'hourlyCheck'; }).length === 1, __triggers.map(function (t) { return t.fn; }));
+check('the weekly backup runs on a Sunday', __triggers.filter(function (t) { return t.fn === 'weeklyBackup'; })[0].day === 'SUNDAY');
+
+// 23. the admin app adding, changing and removing products
+function productIn(res, name) { return (res.config.products || []).filter(function (p) { return p.name === name; })[0]; }
+function recipeRows(name) { return rows('Recipes').filter(function (r) { return r[0] === name; }); }
+function recipeHead() { var sh = sheet('Recipes'); return sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String); }
+
+var addRes = post({ key: s.key, action: 'saveProduct', name: 'Blue9', name_hi: 'ब्लू9', batchNote: '1 batch = 20 kg', recipe: { S1: 1.5, P2: 0.25 } });
+check('a new product is added', addRes.ok && addRes.created === true, addRes);
+check('with its recipe', (productIn(addRes, 'Blue9') || {}).recipe && productIn(addRes, 'Blue9').recipe.S1 === 1.5 && productIn(addRes, 'Blue9').recipe.P2 === 0.25, productIn(addRes, 'Blue9'));
+check('with its Hindi name and note', productIn(addRes, 'Blue9').batchNote === '1 batch = 20 kg' && productIn(addRes, 'Blue9').name_hi.length > 0, productIn(addRes, 'Blue9'));
+check('as exactly one row in the Recipes tab', recipeRows('Blue9').length === 1, recipeRows('Blue9').length);
+
+var chg = post({ key: s.key, action: 'saveProduct', name: 'Blue9', recipe: { S1: 2 } });
+check('changing it does not add a second row', chg.ok && chg.created === false && recipeRows('Blue9').length === 1, [chg.created, recipeRows('Blue9').length]);
+check('an amount cleared in the app is cleared in the sheet', productIn(chg, 'Blue9').recipe.S1 === 2 && !('P2' in productIn(chg, 'Blue9').recipe), productIn(chg, 'Blue9').recipe);
+
+// a colour the owner typed into the sheet must survive an edit from the app
+var colorCol = recipeHead().indexOf('Color') + 1;
+var blueRow = rows('Recipes').findIndex(function (r) { return r[0] === 'Blue9'; }) + 2;
+sheet('Recipes').getRange(blueRow, colorCol).setValue('#123456');
+post({ key: s.key, action: 'saveProduct', name: 'Blue9', recipe: { S1: 2 } });
+check('a colour set in the sheet is not wiped by the app', readConfig_().products.filter(function (p) { return p.name === 'Blue9'; })[0].color === '#123456',
+  readConfig_().products.filter(function (p) { return p.name === 'Blue9'; })[0].color);
+
+var withY8 = post({ key: s.key, action: 'saveProduct', name: 'Blue9', recipe: { S1: 2, Y8: 0.4 } });
+check('a material that had no amount before is written', productIn(withY8, 'Blue9').recipe.Y8 === 0.4, productIn(withY8, 'Blue9').recipe);
+
+// the owner adds a brand new raw material, so Recipes has no column for it yet
+var mTab = sheet('Materials');
+writeRows_(mTab, mTab.getLastRow() + 1, [['Q1', 'Q1', '', 'kg', '', '', '', '', '']], [1, 8]);
+check('the new raw material is read from the Materials tab', readConfig_().materials.some(function (m) { return m.code === 'Q1'; }));
+check('Recipes has no column for it yet', recipeHead().indexOf('Q1') < 0, recipeHead());
+var withQ = post({ key: s.key, action: 'saveProduct', name: 'Blue9', recipe: { S1: 2, Q1: 0.75 } });
+check('saving a recipe that uses it adds the column', recipeHead().indexOf('Q1') >= 0, recipeHead());
+check('and the amount reads back', productIn(withQ, 'Blue9').recipe.Q1 === 0.75, productIn(withQ, 'Blue9').recipe);
+check('adding the column raises no warning', !readConfig_().warnings.some(function (w) { return w.indexOf('Q1') >= 0; }), readConfig_().warnings);
+
+check('a product with no name is refused', post({ key: s.key, action: 'saveProduct', name: '   ', recipe: { S1: 1 } }).error === 'no-name');
+check('a product with no amounts is refused', post({ key: s.key, action: 'saveProduct', name: 'Empty', recipe: {} }).error === 'no-amounts');
+check('a negative amount is refused', post({ key: s.key, action: 'saveProduct', name: 'Neg', recipe: { S1: -1 } }).error === 'bad-amount');
+check('neither was written to the sheet', recipeRows('Empty').length === 0 && recipeRows('Neg').length === 0);
+
+// an entry recorded with this product must survive the product being removed
+post({ key: s.key, action: 'sync', phone: 'Phone A', entries: [
+  mk('b9', { type: 'production', product: 'Blue9', batches: 2, time: '20:00', lines: [{ material: 'S1', qty: 4, unit: 'kg' }] }) ] });
+var delRes = post({ key: s.key, action: 'deleteProduct', name: 'blue9' }); // capitals don't matter
+check('a product is removed', delRes.ok && !productIn(delRes, 'Blue9'), delRes.error || 'still there');
+check('its row is gone from the Recipes tab', recipeRows('Blue9').length === 0);
+check('removing an unknown product is refused', post({ key: s.key, action: 'deleteProduct', name: 'Nope' }).error === 'unknown-product');
+var afterDel = buildReportModel({ entries: readAllEntries_(), config: readConfig_(), date: today, source: 'sheet' });
+check('an entry recorded with it keeps its raw material', afterDel.today.production.some(function (r) { return r.product === 'Blue9' && r.batches === 2; }) &&
+  afterDel.today.materials.filter(function (m) { return m.code === 'S1'; })[0].used >= 4,
+  afterDel.today.production.map(function (r) { return r.product; }));
 
 console.log(__fails ? ('\n' + __fails + ' FAILED') : '\nALL PASSED');

@@ -87,6 +87,16 @@ The email also has a **Raw material stock** section, once stock has been added i
   - The daily email lists it at the top.
 - The **Stock** tab shows the same numbers, refreshed after every sync and every hour.
 
+## 8. Backups
+
+This Sheet is the only long-term copy of your entries: the phones keep about two months and cannot send them again. So the script saves a copy of the whole Sheet for you.
+
+- **Every Sunday, early morning**, a copy is saved in your Google Drive, in a folder called **Prism backups**, named like `Prism Production backup 2026-11-22`.
+- **The newest 8 copies are kept** (about two months). Older ones go to the Drive bin.
+- **To make one right now:** **Prism → Back up this sheet now**.
+- **To check it's working:** the **Settings** tab has a **Last backup** row, filled in automatically.
+- **To restore one:** open the backup in Drive and use **File → Make a copy**, or copy the rows you need back into the live Sheet. The backups are ordinary Google Sheets.
+
 ---
 
 ## Everyday use
@@ -123,6 +133,10 @@ When you get a new `Code.gs`:
 4. Reload the Sheet, then click **Prism → Set up / repair this sheet**. It's safe to run any time: it keeps your data and also fixes any garbled text (like `¬∑` or `‡§`).
 
 The link stays the same, so nothing changes on the phones.
+
+**Did the new version really go live?** On a phone that's connected, open **⚙ Settings**. Under **Google Sheet** it now says either *"Sheet script version 0.3.0 · same as the app"* or a warning telling you the Sheet is still running an older one. (Tap **Send now** first if it hasn't synced lately.) You can also open the web app link in a browser: it prints the version it's running.
+
+> **One-time, when updating to 0.3.0:** this version saves a weekly backup, so Google needs **one new permission** (to put a copy in your Drive). Step 4 above is what asks for it — **do not skip it**. Until you do, the hourly job that sends the daily email may stop with an authorisation error. You'll see the same "Google hasn't verified this app" screen as the first time: **Advanced → Go to … → Allow**.
 
 ## Limits worth knowing
 

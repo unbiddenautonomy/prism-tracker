@@ -53,12 +53,25 @@ def save_db(db):
     os.replace(tmp, DB_PATH)
 
 
-def sheet_config(db=None):
-    """What the real sheet would return from its Materials/Recipes/Workers tabs.
-    Put a dev-data/mock-config.json next to test "recipes changed in the sheet"."""
+def raw_config():
+    """The pretend sheet's own tabs. Starts as app/config.json; once the admin app
+    changes a recipe it is kept in dev-data/mock-config.json."""
     path = MOCK_CONFIG_PATH if os.path.exists(MOCK_CONFIG_PATH) else os.path.join(APP_DIR, "config.json")
     with open(path, encoding="utf-8") as f:
-        cfg = json.load(f)
+        return json.load(f)
+
+
+def save_raw_config(cfg):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = MOCK_CONFIG_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, MOCK_CONFIG_PATH)
+
+
+def sheet_config(db=None):
+    """What the real sheet would return from its Materials/Recipes/Workers tabs."""
+    cfg = raw_config()
     keep = ("appName", "ownerPin", "categoryColors", "materials", "products", "workers", "warnings")
     out = {k: cfg[k] for k in keep if k in cfg}
     low = (db or load_db()).get("lowStock", {})
@@ -176,6 +189,51 @@ def handle_mock(req):
         cfg = sheet_config(db)
         today = datetime.date.today().isoformat()
         return {"ok": True, "config": cfg, "stock": compute_stock(list(db["entries"].values()), cfg, today), "today": today}
+    if action == "saveProduct":
+        name = str(req.get("name") or "").strip()
+        if not name:
+            return {"ok": False, "error": "no-name"}
+        recipe = {}
+        for code, value in (req.get("recipe") or {}).items():
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                return {"ok": False, "error": "bad-amount"}
+            if v < 0:
+                return {"ok": False, "error": "bad-amount"}
+            if v > 0:
+                recipe[code] = v
+        if not recipe:
+            return {"ok": False, "error": "no-amounts"}
+        with LOCK:
+            cfg = raw_config()
+            products = cfg.setdefault("products", [])
+            found = next((p for p in products if str(p.get("name", "")).lower() == name.lower()), None)
+            row = found if found is not None else {"color": ""}
+            row.update({
+                "name": name,
+                "name_hi": req.get("name_hi", ""),
+                "batchNote": req.get("batchNote", ""),
+                "batchNote_hi": req.get("batchNote_hi", ""),
+                "category": req.get("category", ""),
+                "recipe": recipe,
+            })
+            if found is None:
+                products.append(row)
+            save_raw_config(cfg)
+            db = load_db()
+        return {"ok": True, "created": found is None, "config": sheet_config(db)}
+    if action == "deleteProduct":
+        name = str(req.get("name") or "").strip()
+        with LOCK:
+            cfg = raw_config()
+            kept = [p for p in cfg.get("products", []) if str(p.get("name", "")).lower() != name.lower()]
+            if len(kept) == len(cfg.get("products", [])):
+                return {"ok": False, "error": "unknown-product"}
+            cfg["products"] = kept
+            save_raw_config(cfg)
+            db = load_db()
+        return {"ok": True, "config": sheet_config(db)}
     return {"ok": False, "error": "unknown-action"}
 
 

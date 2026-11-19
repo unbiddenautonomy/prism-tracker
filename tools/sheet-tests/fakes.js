@@ -126,11 +126,55 @@ var Utilities = {
 };
 var PropertiesService = { getScriptProperties: function () { return { setProperty: function (k, v) { __props[k] = v; }, getProperty: function (k) { return __props[k] || null; } }; } };
 var ScriptApp = {
+  WeekDay: { SUNDAY: 'SUNDAY' },
   getProjectTriggers: function () { return __triggers.slice(); },
   deleteTrigger: function (t) { __triggers = __triggers.filter(function (x) { return x !== t; }); },
   newTrigger: function (fn) {
-    return { timeBased: function () { return { everyHours: function (h) { return { create: function () { var t = { fn: fn, h: h, getHandlerFunction: function () { return fn; } }; __triggers.push(t); return t; } }; } }; } };
+    var push = function (extra) {
+      var t = Object.assign({ fn: fn, getHandlerFunction: function () { return fn; } }, extra);
+      __triggers.push(t);
+      return t;
+    };
+    return {
+      timeBased: function () {
+        return {
+          everyHours: function (h) { return { create: function () { return push({ h: h }); } }; },
+          onWeekDay: function (d) { return { atHour: function (h) { return { create: function () { return push({ day: d, h: h }); } }; } }; },
+        };
+      },
+    };
   },
+};
+
+// ---- Drive, for the weekly backup ----
+var __folders = [];
+var __driveSeq = 0;
+function __iter(arr) {
+  var i = 0;
+  return { hasNext: function () { return i < arr.length; }, next: function () { return arr[i++]; } };
+}
+function FakeDriveFile(name, folder) {
+  this.name = name; this.folder = folder; this.trashed = false;
+  this.created = new Date(2026, 0, 1, 0, 0, __driveSeq++); // later copies look newer
+}
+FakeDriveFile.prototype.getName = function () { return this.name; };
+FakeDriveFile.prototype.getDateCreated = function () { return this.created; };
+FakeDriveFile.prototype.setTrashed = function (v) { this.trashed = v; return this; };
+FakeDriveFile.prototype.makeCopy = function (name, folder) {
+  var f = new FakeDriveFile(name, folder);
+  folder.files.push(f);
+  return f;
+};
+function FakeFolder(name) { this.name = name; this.files = []; }
+FakeFolder.prototype.getName = function () { return this.name; };
+FakeFolder.prototype.live = function () { return this.files.filter(function (f) { return !f.trashed; }); };
+FakeFolder.prototype.getFiles = function () { return __iter(this.live()); };
+FakeFolder.prototype.getFilesByName = function (n) { return __iter(this.live().filter(function (f) { return f.name === n; })); };
+var __ssFile = new FakeDriveFile('Prism Production', null);
+var DriveApp = {
+  getFoldersByName: function (n) { return __iter(__folders.filter(function (f) { return f.name === n; })); },
+  createFolder: function (n) { var f = new FakeFolder(n); __folders.push(f); return f; },
+  getFileById: function () { return __ssFile; },
 };
 var MailApp = { sendEmail: function (o) { __mail.push(o); } };
 var Session = { getEffectiveUser: function () { return { getEmail: function () { return 'owner@example.com'; } }; } };

@@ -79,6 +79,14 @@ Reports now show every phone's entries. The daily email keeps coming from Google
 3. Enter the amount, in kg or in bags/drums, and tap the big button.
 4. Under **Low stock alert**, enter the amount at which you want a warning, then tap **Save alert**. This needs internet.
 
+**Recipes** (the button at the bottom of Prism Admin):
+1. Tap a product to change what **one batch** uses, or **Add a product**.
+2. Enter the PIN.
+3. Fill in the amount of each raw material for a single batch; leave the ones it doesn't use empty.
+4. **Save product**. Workers see it within about 15 minutes, or straight away when they next open the app.
+
+Removing a product only stops workers seeing it — everything already recorded keeps its amounts. This needs internet, because recipes live in the Sheet.
+
 Admins on Android can do the same in Chrome with the `/admin` link.
 
 ---

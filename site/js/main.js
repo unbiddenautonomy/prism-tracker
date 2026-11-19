@@ -14,6 +14,7 @@ import { logScreen } from './screens/log.js';
 import { reportScreen } from './screens/report-view.js';
 import { settingsScreen } from './screens/settings.js';
 import { stockScreen } from './screens/stock.js';
+import { recipesScreen } from './screens/recipes.js';
 
 const ROUTES = {
   home: () => homeScreen(),
@@ -25,6 +26,7 @@ const ROUTES = {
   report: () => reportScreen(),
   settings: () => settingsScreen(),
   stock: (a) => stockScreen(a),
+  recipes: (a) => recipesScreen(a),
 };
 
 const app = document.getElementById('app');
@@ -88,7 +90,7 @@ function render() {
   document.querySelectorAll('.overlay').forEach((o) => o.remove());
   const route = nav.currentRoute();
   // The owner can open Reports, Stock and Settings without picking a worker.
-  if (!store.getSettings().worker && ['who', 'settings', 'report', 'stock'].indexOf(route.name) < 0) {
+  if (!store.getSettings().worker && ['who', 'settings', 'report', 'stock', 'recipes'].indexOf(route.name) < 0) {
     nav.replace('who');
     return;
   }

@@ -3,9 +3,19 @@
 const VERSION = 'prism-dev'; // tools/make_website.py stamps a new value for each upload
 // Pages use their clean addresses ('./' and './admin'); Cloudflare redirects the .html names,
 // and a saved redirect can't be used to open a page offline.
+const SEND_TAG = 'prism-send';
+// Sending with the app shut needs the waiting list; if this can't be loaded the app
+// still works and still sends whenever it is open.
+try {
+  importScripts('./js/outbox.js');
+} catch (err) {
+  console.warn('Background sending unavailable:', err);
+}
+
 const CORE = [
   './',
   './admin',
+  './js/outbox.js',
   './css/app.css',
   './config.json',
   './manifest.webmanifest',
@@ -32,6 +42,7 @@ const CORE = [
   './js/screens/report-view.js',
   './js/screens/settings.js',
   './js/screens/stock.js',
+  './js/screens/recipes.js',
   './icons/app-192.png',
   './icons/admin-192.png',
   './icons/favicon-64.png',
@@ -79,6 +90,45 @@ async function savedFirst(req) {
   if (!saved) return fresh;
   fresh.catch(() => {}); // no signal: the saved copy has already gone back
   return saved;
+}
+
+// ---- Sending with the app shut ----
+// Android Chrome wakes the worker when the phone has signal again. iPhones don't
+// support this, so there the app sends whenever someone opens it, as before.
+self.addEventListener('sync', (event) => {
+  if (event.tag === SEND_TAG) event.waitUntil(sendWaiting());
+});
+
+async function sendWaiting() {
+  if (!self.PrismOutbox) return;
+  const box = await self.PrismOutbox.read();
+  if (!box || !box.url || !box.entries || !box.entries.length) return;
+  const res = await fetch(box.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action: 'sync',
+      key: box.key,
+      phone: box.phone,
+      worker: box.worker,
+      appVersion: box.appVersion,
+      entries: box.entries,
+    }),
+    redirect: 'follow',
+  });
+  const data = JSON.parse(await res.text());
+  // Throwing asks the phone to try again later, which is what a weak signal needs.
+  if (!data.ok) throw new Error(data.error || 'sheet-error');
+  const saved = data.saved || [];
+  const done = box.entries.filter((e) => saved.indexOf(e.id) >= 0);
+  if (!done.length) return;
+  await self.PrismOutbox.addSent(done.map((e) => ({ id: e.id, updatedAt: e.updatedAt })));
+  const left = box.entries.filter((e) => saved.indexOf(e.id) < 0);
+  if (left.length) await self.PrismOutbox.save(Object.assign({}, box, { entries: left }));
+  else await self.PrismOutbox.clear();
+  // If a copy of the app happens to be open, let it tick the entries off at once.
+  const open = await self.clients.matchAll({ includeUncontrolled: true });
+  open.forEach((c) => c.postMessage({ type: 'prism-sent' }));
 }
 
 // Pages are saved under their clean addresses ('./' and './admin').

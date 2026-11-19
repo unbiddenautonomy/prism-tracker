@@ -5,7 +5,7 @@ A simple phone app for the factory floor that records two things:
 - **Batches made**: pick a product and the number of batches. The app works out the raw materials used from the recipe.
 - **Waste / Spill**: what was lost (a raw material or a spoiled batch), how much, and why.
 
-The **Prism Admin** app also keeps **raw material stock**: the admin adds deliveries and removals, the app subtracts what batches used and what was wasted, and warns (in the app and by email) when a material falls below its alert level.
+The **Prism Admin** app also keeps **raw material stock**: the admin adds deliveries and removals, the app subtracts what batches used and what was wasted, and warns (in the app and by email) when a material falls below its alert level. It has a **Recipes** screen too, so products and the amounts one batch uses can be added, changed and removed from the phone.
 
 Entries are saved on the phone first, so the app works without internet. They're sent to a **Google Sheet** that acts as the shared database. Google sends you a **daily email** with today's and this month's totals from every phone. Screens are in **English and Hindi**.
 
@@ -63,7 +63,7 @@ It prints an address like `http://192.168.1.20:8080`. Open that in Chrome on a p
     - **Products** use their own `"color"`. If that's blank, they use their `"category"` color from `categoryColors`. If both are blank, they get an automatic neon color.
     - **Hindi notes:** `batchNote_hi` is the Hindi version of a product's note.
   - `ownerPin`: PIN for ⚙ Settings.
-- **After the Google Sheet is connected:** edit the **Recipes / Materials / Workers** tabs in the Sheet. Phones pick up changes by themselves, and the Sheet wins over `config.json`.
+- **After the Google Sheet is connected:** use **Prism Admin → Recipes** on the phone, or edit the **Recipes / Materials / Workers** tabs in the Sheet. Phones pick up changes by themselves, and the Sheet wins over `config.json`.
 
 After editing `config.json`, `app/js/recipes.js`, `app/js/report.js` or `google-sheet/server.js`, rebuild the script you paste into Google:
 
@@ -114,6 +114,8 @@ The app works offline after the first open, and new versions reach phones automa
 - **Workers can only change entries made today on their phone.** Older fixes are done in the Sheet.
 - **What stays on each phone:** the last ~2 months of sent entries, plus anything not yet sent.
 - **Two copies of the app open at once** (Prism and Prism Admin, or two tabs) share the same saved entries instead of overwriting each other.
+- **Entries leave the phone even with the app shut** on Android Chrome, as soon as there is signal. iPhones send when the app is opened.
+- **The Sheet copies itself to Google Drive every Sunday**, newest 8 kept, so the only long-term copy isn't the only copy.
 - **Adding or removing stock, and alert levels, need the owner PIN,** even though anyone with the link can open `/admin`.
 
 ## Not in this version

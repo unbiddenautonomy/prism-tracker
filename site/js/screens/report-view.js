@@ -255,7 +255,14 @@ export function reportScreen() {
         } }, icon('refresh', 18), t('refresh')),
         h('button', { class: 'btn', onclick: share }, icon('share', 18), t('share'))
       ),
-      isAdmin ? h('button', { class: 'btn', onclick: () => nav.go('settings') }, icon('sliders', 18), t('settings')) : null,
+      isAdmin
+        ? h(
+            'div',
+            { class: 'duo' },
+            h('button', { class: 'btn', onclick: () => nav.go('recipes') }, icon('flask', 18), t('setRecipes')),
+            h('button', { class: 'btn', onclick: () => nav.go('settings') }, icon('sliders', 18), t('settings'))
+          )
+        : null,
     ],
   };
 }
