@@ -90,7 +90,7 @@ The app works offline after the first open, and new versions reach phones automa
 
 | Path | What it is |
 |---|---|
-| `app/` | The app itself: screens, styles and `config.json`. This becomes the Android app. |
+| `app/` | The app itself: screens, styles and `config.json`. The website copy is built from this. |
 | `app/js/i18n.js` | All English and Hindi wording |
 | `app/js/recipes.js` | Recipe math (shared with the Google Sheet script) |
 | `app/js/report.js` | Daily/monthly report (shared with the Google Sheet script) |
@@ -113,7 +113,10 @@ The app works offline after the first open, and new versions reach phones automa
 - **Delete and Undo** don't erase anything. The entry is marked deleted, so the Sheet hears about it too, and the Entries tab keeps an audit trail.
 - **Workers can only change entries made today on their phone.** Older fixes are done in the Sheet.
 - **What stays on each phone:** the last ~2 months of sent entries, plus anything not yet sent.
+- **Two copies of the app open at once** (Prism and Prism Admin, or two tabs) share the same saved entries instead of overwriting each other.
+- **Adding or removing stock, and alert levels, need the owner PIN,** even though anyone with the link can open `/admin`.
 
 ## Not in this version
 
-- Purchases and stock levels. Planned for a separate admin app; the Sheet has room for it.
+- Purchases and suppliers. Raw material stock itself is in the admin app.
+- Changing an older entry on the phone. Those are fixed in the Sheet (see [google-sheet/SETUP.md](google-sheet/SETUP.md)).

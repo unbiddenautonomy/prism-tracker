@@ -4,12 +4,13 @@
 import { h, numpad, segmented, dayPicker, noteField, toast, confirmDialog, entryBadge, dot, describeEntry, syncBadge } from '../ui.js';
 import { t, getLang, nameOf } from '../i18n.js';
 import { findMaterial, fmtNum, round3, localYmd, localHm, shortDate } from '../recipes.js';
-import { computeStock, finishStockRow } from '../report.js';
+import { computeStock, finishStockRow, wasteUsesRaw } from '../report.js';
 import { stockBar } from '../charts.js';
 import { icon } from '../icons.js';
 import * as store from '../store.js';
 import * as nav from '../nav.js';
 import * as sync from '../sync.js';
+import * as lock from '../lock.js';
 
 let draft = null; // { code, move: 'in'|'out', amount, unitMode, note, date }
 let lastFetch = { ok: null, err: '' };
@@ -35,7 +36,9 @@ function configWithLocalAlerts(cfg) {
 function fieldOf(e) {
   if (e.type === 'stock') return e.move === 'out' ? 'removed' : 'added';
   if (e.type === 'production') return 'used';
-  if (e.type === 'waste') return 'wasted';
+  // A spoiled batch already recorded as made used no extra raw material: the same
+  // rule the sheet uses, so the offline guess matches what comes back online.
+  if (e.type === 'waste') return wasteUsesRaw(e) ? 'wasted' : '';
   return '';
 }
 
@@ -204,6 +207,10 @@ function itemScreen(code) {
     nav.replace('stock');
     return null;
   }
+  // Adding, removing and alert levels are the owner's, not a worker's: anyone can
+  // open the /admin link, so ask for the PIN before this screen (the list stays open).
+  if (!lock.isUnlocked()) return lock.pinScreen({ flow: t('stock'), tone: 'blue', goTo: 'stock/' + encodeURIComponent(code) });
+  lock.keepUnlocked();
   if (!draft || draft.code !== code) draft = { code, move: 'in', amount: '', unitMode: -1, note: '', date: localYmd() };
   const cur = currentStock();
   const row = cur ? cur.rows.find((r) => r.code === code) : null;

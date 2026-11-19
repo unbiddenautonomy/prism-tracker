@@ -52,12 +52,13 @@ Phones pick up the new version the next time they open the app with internet. If
 
 1. Open the link in **Chrome**.
 2. Tap **⋮** (top right) → **Install app**. On some phones it says **Add to Home screen** → **Install**. A **Prism** icon appears on the home screen.
-3. Open Prism **from that icon**, choose the language and tap the worker's name.
+3. Open Prism **from that icon** and choose the language.
 4. Connect it to the Sheet (owner does this once per phone):
-   1. Tap **Settings** and enter the PIN.
-   2. Paste the **Sheet link** and the **Secret key**.
-   3. Tap **Save and test**. You should see ✓ Connected.
-   4. The products appear.
+   1. On the "Who are you?" screen, tap **My name is not in the list**, type any name and save. (The workers' real names are not on the website; they arrive with the recipes in the next step.)
+   2. Tap **Settings** and enter the PIN.
+   3. Paste the **Sheet link** and the **Secret key**.
+   4. Tap **Save and test**. You should see ✓ Connected.
+   5. The products and the worker names appear. Tap **Change** next to the name and pick the right worker.
 
 **Tip:** send yourself the Sheet link and key on WhatsApp, copy-paste them on the phone, then delete the message.
 
@@ -73,7 +74,7 @@ Phones pick up the new version the next time they open the app with internet. If
 Reports now show every phone's entries. The daily email keeps coming from Google as before.
 
 **Raw material stock** (the button at the top of Prism Admin):
-1. Tap a material.
+1. Tap a material. **Enter the PIN** — the list is readable by anyone with the link, but changing stock is not.
 2. Choose **Add stock** (a delivery arrived) or **Remove stock** (returned, given away, counted less).
 3. Enter the amount, in kg or in bags/drums, and tap the big button.
 4. Under **Low stock alert**, enter the amount at which you want a warning, then tap **Save alert**. This needs internet.
@@ -84,11 +85,11 @@ Admins on Android can do the same in Chrome with the `/admin` link.
 
 ## Safety
 
-- **What's on the website:** only the app's screens, the raw material codes and the default PIN. Without the secret key, someone who finds the link sees an empty app that can't send or read anything.
+- **What's on the website:** only the app's screens, the raw material codes and the default PIN. No recipes, no worker names, no secret key. Without the key, someone who finds the link sees an empty app that can't send or read anything. The website also asks search engines to stay away, so the link has to be shared to be found.
 - **Secret key:** keep it private.
   - **If it leaks:** change **Secret key** in the Sheet's **Settings** tab, then enter the new key on each phone.
   - **Each phone stores its own copy.** On a phone that leaves the company, open Settings → **Disconnect**.
-- **Owner PIN:** the PIN that unlocks Settings comes from the Sheet once a phone is connected. Until then it's the default `1234`.
+- **Owner PIN:** unlocks ⚙ Settings and any change to stock or alert levels. It comes from the Sheet once a phone is connected; until then it's the default `1234`. **Change it** in the Sheet's **Settings** tab. After five wrong tries the keypad waits half a minute.
 
 ## If something's off
 

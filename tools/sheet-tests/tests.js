@@ -280,4 +280,79 @@ check('email text marks it', renderReportText(m16, 'en').indexOf('already counte
 var matWaste = cleanEntry_({ id: 'x', type: 'waste', material: 'S2', qty: 1, madeBefore: true, lines: [] });
 check('raw material waste can never be marked already made', matWaste.madeBefore === false);
 
+// 17. the owner corrects a number by hand in the Entries tab
+function rowNum(id) { return rows('Entries').findIndex(function (r) { return r[colOf_('id') - 1] === id; }) + 2; }
+function entryBack(id) { return readAllEntries_().filter(function (e) { return e.id === id; })[0]; }
+post({ key: s.key, action: 'sync', phone: 'Phone A', entries: [
+  mk('h0', { type: 'stock', move: 'in', material: 'S3', qty: 100, unit: 'kg', time: '16:00', lines: [{ material: 'S3', qty: 100, unit: 'kg' }] }),
+  mk('h1', { type: 'production', product: 'Y111', batches: 4, time: '17:00', lines: [{ material: 'S3', qty: 8, unit: 'kg' }] }),
+] });
+check('S3 before any hand edit: 100 in, 8 used', stockOf(stockNow_(), 'S3').left === 92, stockOf(stockNow_(), 'S3').left);
+sheet('Entries').getRange(rowNum('h1'), colOf_('batches')).setValue(1); // 4 batches -> 1
+check('hand-edited Batches scales the raw material (8 -> 2)', entryBack('h1').lines[0].qty === 2, entryBack('h1').lines);
+check('hand-edited Batches moves the stock with it (92 -> 98)', stockOf(stockNow_(), 'S3').left === 98, stockOf(stockNow_(), 'S3').left);
+var handModel = buildReportModel({ entries: readAllEntries_(), config: readConfig_(), date: today, source: 'sheet' });
+check('the report follows the hand edit', handModel.today.materials.filter(function (m) { return m.code === 'S3'; })[0].used === 2);
+
+post({ key: s.key, action: 'sync', phone: 'Phone A', entries: [
+  mk('h2', { type: 'waste', material: 'S3', qty: 10, unit: 'kg', reason: 'spill', time: '18:00', lines: [{ material: 'S3', qty: 10, unit: 'kg' }] }) ] });
+check('waste of 10 kg takes S3 to 88', stockOf(stockNow_(), 'S3').left === 88, stockOf(stockNow_(), 'S3').left);
+sheet('Entries').getRange(rowNum('h2'), colOf_('qty')).setValue(4); // 10 kg -> 4
+check('hand-edited Qty scales the waste too (88 -> 94)', stockOf(stockNow_(), 'S3').left === 94, stockOf(stockNow_(), 'S3').left);
+sheet('Entries').getRange(rowNum('h2'), colOf_('linesJson')).setValue('[{"material":"S3","qty":4,"unit":"kg"}]');
+sheet('Entries').getRange(rowNum('h2'), colOf_('qty')).setValue(2);
+check('a row written by an older version is read, but cannot follow the edit', entryBack('h2').lines[0].qty === 4, entryBack('h2').lines);
+
+// 18. the owner inserts a column in the Materials tab
+var mSheet = sheet('Materials');
+mSheet.data = mSheet.data.map(function (r, i) { var c = r.slice(); c.splice(2, 0, i === 0 ? 'Supplier' : 'ACME'); return c; });
+var cfgIns = readConfig_();
+check('an inserted Materials column does not scramble the materials',
+  cfgIns.materials[0].code === 'R1' && cfgIns.materials[0].unit === 'kg' && cfgIns.materials[0].containers.length === 1 && cfgIns.materials[0].containers[0].size === 25,
+  cfgIns.materials[0]);
+check('and raises no false warnings', !cfgIns.warnings.some(function (w) { return w.indexOf('Materials') === 0; }), cfgIns.warnings);
+var lowIns = post({ key: s.key, action: 'setLowStock', material: 'S3', value: 7 });
+check('the alert level still goes into the right column', lowIns.ok && stockOf(lowIns.config.materials, 'S3').lowStock === 7, lowIns.error || lowIns.config);
+mSheet.data = mSheet.data.map(function (r) { var c = r.slice(); c.splice(2, 1); return c; });
+check('and is still there once the extra column goes', stockOf(readConfig_().materials, 'S3').lowStock === 7);
+mSheet.getRange(1, 2).setValue('Naam');
+check('a renamed heading is reported', readConfig_().warnings.some(function (w) { return w.indexOf('"Name" column heading') >= 0; }), readConfig_().warnings);
+mSheet.getRange(1, 2).setValue('Name');
+
+// 19. text that starts with "=" must never become a live formula
+function fmtOf(tab, dataRow, col0) { return (sheet(tab).formats[dataRow] || {})[col0] || ''; }
+post({ key: s.key, action: 'sync', phone: '=2+2', worker: '=1+1', entries: [
+  mk('fz', { type: 'waste', material: '=A1', qty: 1, unit: '=B2', reason: 'spill', worker: '=IMPORTDATA("http://x.co")', phone: '=2+2', lines: [{ material: '=A1', qty: 1, unit: 'kg' }] }) ] });
+var fzRow = rowNum('fz') - 1; // 0-based into the fake sheet's data
+check('every text column of Entries is stored as plain text',
+  ['material', 'unit', 'rawText', 'worker', 'phone', 'reason', 'type', 'status'].every(function (f) { return fmtOf('Entries', fzRow, colOf_(f) - 1) === '@'; }));
+check('the two number columns of Entries are left as numbers',
+  ['batches', 'qty'].every(function (f) { return fmtOf('Entries', fzRow, colOf_(f) - 1) !== '@'; }));
+var useRow = sheet('Material Use').data.findIndex(function (r) { return r[9] === 'fz'; });
+check('Material Use: every column but Qty is plain text',
+  USE_TEXT_COLS.every(function (c) { return fmtOf('Material Use', useRow, c - 1) === '@'; }) && fmtOf('Material Use', useRow, 3) !== '@');
+var phoneRow = sheet('Phones').data.findIndex(function (r) { return r[0] === '=2+2'; });
+check('Phones: every column is plain text', [0, 1, 2, 3].every(function (c) { return fmtOf('Phones', phoneRow, c) === '@'; }));
+check('Stock: the name and date columns are plain text', fmtOf('Stock', 1, 0) === '@' && fmtOf('Stock', 1, 1) === '@' && fmtOf('Stock', 1, 2) === '@');
+
+// 20. impossible amounts and dates
+var s3Before = stockOf(stockNow_(), 'S3').left;
+post({ key: s.key, action: 'sync', phone: 'Phone A', entries: [
+  mk('neg', { type: 'waste', material: 'S3', qty: -500, unit: 'kg', reason: 'spill', time: '19:00', lines: [{ material: 'S3', qty: -500, unit: 'kg' }] }) ] });
+check('a negative waste can never ADD to stock', stockOf(stockNow_(), 'S3').left === s3Before, [s3Before, stockOf(stockNow_(), 'S3').left]);
+check('a phone clock years out lands on the sheet\'s today', cleanEntry_({ id: 'd1', type: 'production', date: '2031-01-01' }).date === today);
+check('a date years in the past lands on today too', cleanEntry_({ id: 'd2', type: 'production', date: '2019-05-05' }).date === today);
+check('yesterday is still kept', cleanEntry_({ id: 'd3', type: 'production', date: yesterday }).date === yesterday);
+
+// 21. phones that stopped being used
+var phoneModel = buildReportModel({ entries: [], config: readConfig_(), date: today, source: 'sheet', phones: [
+  { phone: 'Old phone', lastSync: addDays(today, -40) + ' 10:00', worker: 'X' },
+  { phone: 'Today phone', lastSync: today + ' 08:00', worker: 'Y' },
+  { phone: 'Quiet phone', lastSync: addDays(today, -2) + ' 08:00', worker: 'Z' },
+] });
+var phoneHtml = renderReportHtml(phoneModel, 'en');
+check('only a phone seen in the last week is warned about', (phoneHtml.match(/NOT sent today/g) || []).length === 1, (phoneHtml.match(/NOT sent today/g) || []).length);
+check('the long-gone phone is still listed, just not warned about', phoneHtml.indexOf('Old phone') >= 0);
+check('the plain-text report warns about the same one only', (renderReportText(phoneModel, 'en').match(/NOT sent today/g) || []).length === 1);
+
 console.log(__fails ? ('\n' + __fails + ' FAILED') : '\nALL PASSED');

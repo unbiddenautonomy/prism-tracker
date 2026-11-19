@@ -30,6 +30,7 @@ HEADERS = """/*
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   X-Frame-Options: DENY
+  X-Robots-Tag: noindex, nofollow
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'
 
@@ -55,8 +56,8 @@ def main():
     with open(path, encoding="utf-8") as f:
         cfg = json.load(f)
     safe = {
-        "_help": ("DEMO website copy: contains SAMPLE recipes only. The Sheet key is never here." if demo else
-                  "Website copy. Recipes and the Sheet key are NOT here on purpose: phones receive recipes from the Google Sheet after the key is entered once in Settings."),
+        "_help": ("DEMO website copy: contains SAMPLE recipes only. Worker names and the Sheet key are never here." if demo else
+                  "Website copy. Recipes, worker names and the Sheet key are NOT here on purpose: phones receive them from the Google Sheet after the key is entered once in Settings."),
         "appName": cfg.get("appName", "Prism"),
         "ownerPin": cfg.get("ownerPin", "1234"),
         "sheet": {"url": "", "key": ""},
@@ -64,7 +65,9 @@ def main():
         "materials": cfg.get("materials", []),
         # Demo builds show the sample products so the app can be shown without the Sheet.
         "products": cfg.get("products", []) if demo else [],
-        "workers": cfg.get("workers", []),
+        # Real names never go on a public address, demo or not. Phones read them from
+        # the Sheet once connected; until then a worker types their name once.
+        "workers": [],
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(safe, f, ensure_ascii=False, indent=2)
@@ -81,11 +84,15 @@ def main():
     # 3. security + caching rules for Cloudflare
     with open(os.path.join(SITE, "_headers"), "w", encoding="utf-8") as f:
         f.write(HEADERS)
+    # The link is meant to be shared with the phones, not found in a search.
+    with open(os.path.join(SITE, "robots.txt"), "w", encoding="utf-8") as f:
+        f.write("User-agent: *\nDisallow: /\n")
 
     # 4. final safety check
     with open(path, encoding="utf-8") as f:
         check = json.load(f)
     assert demo or not check["products"], "recipes must not be on the website"
+    assert not check["workers"], "worker names must not be on the website"
     assert not check["sheet"]["key"], "the secret key must not be on the website"
 
     # 5. zip

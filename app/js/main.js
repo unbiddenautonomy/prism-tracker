@@ -67,7 +67,7 @@ function frame(view) {
     isHome ? null : h('span', { class: 'topbar-flow' }, h('span', { class: 'dot' }), h('span', null, view.flow)),
     h('button', { class: 'icon-btn', onclick: toggleTheme, 'aria-label': currentTheme() === 'light' ? t('toDark') : t('toLight'), title: currentTheme() === 'light' ? t('toDark') : t('toLight') },
       icon(currentTheme() === 'light' ? 'moon' : 'sun', 18)),
-    h('button', { class: 'icon-btn', onclick: toggleLang, 'aria-label': 'language' }, icon('globe', 16), t('langSwitch'))
+    h('button', { class: 'icon-btn', onclick: toggleLang, 'aria-label': t('setLanguage') }, icon('globe', 16), t('langSwitch'))
   );
   const main = h(
     'main',
@@ -108,6 +108,14 @@ function render() {
   updateBadges();
 }
 
+// Workers should never be shown a code like "bad-key": say what is wrong instead.
+function errorText(code) {
+  if (code === 'bad-key') return t('stErrKey');
+  if (code === 'not-a-prism-sheet') return t('stErrLink');
+  if (code.indexOf('sheet-columns') === 0) return t('stErrColumns');
+  return t('stErrReach');
+}
+
 function statusInfo(st) {
   switch (st.state) {
     case 'local':
@@ -115,7 +123,7 @@ function statusInfo(st) {
     case 'sending':
       return { cls: 'sending', text: t('stSending') };
     case 'error':
-      return { cls: 'error', text: t('stError') + (st.error ? ' (' + st.error + ')' : '') };
+      return { cls: 'error', text: errorText(String(st.error || '')) };
     case 'waiting':
       // Nothing waiting = nothing lost, even if the sheet couldn't be reached just now.
       return st.pending ? { cls: 'waiting', text: t('stWaiting', { n: st.pending }) } : { cls: 'ok', text: t('stOk') };
@@ -141,6 +149,11 @@ function updateBadges() {
   });
 }
 
+function phoneLanguage() {
+  const list = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''];
+  return list.some((l) => String(l).toLowerCase().indexOf('hi') === 0) ? 'hi' : 'en';
+}
+
 async function boot() {
   try {
     await store.init();
@@ -148,7 +161,8 @@ async function boot() {
     app.replaceChildren(h('main', { class: 'content' }, h('h1', { class: 'heading' }, 'Prism'), h('p', null, t('bootError', { err: err.message }))));
     return;
   }
-  setLang(store.getSettings().lang || 'en');
+  // A phone whose own language is Hindi should not open in English the first time.
+  setLang(store.getSettings().lang || phoneLanguage());
   const saved = store.getSettings().theme;
   applyTheme(saved === 'light' || saved === 'dark' ? saved : systemLight && systemLight.matches ? 'light' : 'dark');
   // Until someone taps the switch, follow the phone's own light/dark setting.

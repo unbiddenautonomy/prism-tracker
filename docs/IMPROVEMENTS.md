@@ -1,120 +1,75 @@
 # Prism: what to improve
 
-Reviewed 18 Nov 2026 (app 0.2.0).
+Reviewed 18 Nov 2026 (app 0.2.0). **Fixes applied 19 Nov 2026** — see below.
 
 ## Summary
 
-Overall health: the basics hold up (entries are saved on the phone first, the Sheet never gets duplicate rows, all 115 Sheet tests pass), but the phone app itself has no automated tests and has some real gaps. Fix these three first:
+The review found 22 things worth changing. **Fifteen have now been fixed**, including all three of the most serious: entries could be lost when two copies of the app were open, the app took about 20 seconds to open on a weak signal, and correcting a number in the Google Sheet left the raw material totals and stock wrong. All three were reproduced before the fix and checked again after.
 
-1. **Entries can vanish without any warning** when two copies of the app are open on one phone or computer, for example Prism and Prism Admin together.
-2. **On a weak signal the app takes about 20 seconds to open**, although everything it needs is already saved on the phone.
-3. **Correcting a number directly in the Google Sheet does not correct stock or raw material totals**, yet the app tells workers to ask for exactly that.
+Seven things are still open. None of them loses data; they are mostly about catching up later (a daily email that is only a snapshot, no second copy of the Sheet, no automatic test of the phone screens). The two worth doing next are a **weekly backup of the Sheet** and **sending entries in the background** so a phone left in a pocket doesn't hold them.
 
-Every finding below was reproduced on a test copy (Sheet tests, the local test server, a phone-sized Chrome) or is quoted from the code. Not checked: the live website, real Google speed and limits, real phones.
+Checks that run on this machine: `bash tools/sheet-tests/run.sh` — **139 checks pass** (115 before, 24 added for the new behaviour).
 
-## Findings, most important first
+## Fixed
+
+| # | What was wrong | What happens now |
+|---|---|---|
+| 1 | **High.** Two copies of the app open at once (Prism and Prism Admin, or two tabs) erased each other's entries. | Every save is merged with what is already saved, so nothing is lost; a copy also picks up what the other one wrote. |
+| 2 | **High.** The app took ~20 s to open whenever the signal was weak enough that requests were accepted but never answered. | It opens from the saved copy at once (measured 0.1 s) and fetches a fresh copy quietly for the next open. |
+| 3 | **High.** Correcting **Batches** or **Qty** in the Entries tab left the raw material totals, the stock and the email on the old number. | The amounts now follow the correction by themselves. Entries made before this still keep their old amounts — cancel and re-enter those. |
+| 4 | The big button in Waste / Spill read "Enter how muchnull" and "nullTap a reason", in both languages. | Plain wording in both languages. |
+| 5 | Anyone who opened the `/admin` link could remove stock and change alert levels with no PIN. | The stock list stays readable; changing anything asks for the owner PIN, and the keypad waits half a minute after five wrong tries. The worker app's long-press shortcut into `/admin` is gone. |
+| 6 | A dead sheet link looked like "waiting for internet" forever, and a wrong key showed the code "(bad-key)". | Plain words in both languages ("Wrong secret key", "Can't reach the sheet"), and a link that keeps failing for an hour while the phone is online is reported as a real problem. |
+| 10 | Inserting a column in the **Materials** tab scrambled units and container sizes on every phone. | Columns are found by their heading, and a renamed heading is reported in the daily email. |
+| 12a | Offline, a spoiled batch marked "already recorded as made" was taken off stock twice. | The offline figure now matches what comes back from the sheet. |
+| 14 | Text starting with `=` could become a live formula in the Sheet. | Every text column of Entries, Material Use, Phones and Stock is stored as plain text. |
+| 15 | A waste entry of −500 kg *added* 500 kg to stock, and an entry dated 2031 was accepted. | Negative amounts are refused, and a date years out lands on the sheet's own today. |
+| 16 | Old or test phones stayed in the daily email as "NOT sent today" forever. | Only phones used in the last 7 days are warned about; the rest are still listed. |
+| 17 | The guides told you to put the secret key in a file the website build empties, and said stock wasn't in this version. | README, SETUP.md and WEBSITE-AND-PHONES.md match what the code does. |
+| 20 | "बैच बनाए" on the home button but "बैच बने" in the question and the report; a Hindi phone still started in English. | One name everywhere, and a phone set to Hindi opens in Hindi. Still worth having a native speaker read every line once. |
+| 21 | Back, light/dark, language (40 px) and Change (36 px) were under the 48 px minimum; the phone's Back button left the screen instead of closing the "Delete this entry?" box; labels were English-only. | All those buttons are at least 44–48 px, Back (and Escape) closes the box and stays put, the smallest report text is at least 13 px, and the screen-reader labels are translated. |
+| 22 | The website carried the workers' names and nothing kept it out of search engines. | No names in the published copy (phones read them from the Sheet), plus a "stay away" header and `robots.txt`. |
+
+## Still open
 
 Effort: **S** = under a day, **M** = a few days, **L** = a week or more.
 
-### High
+**7. Entries only go to the sheet while the app is open on the screen. (Medium, M)**
+Sending runs on timers inside the page (`app/js/sync.js:121-131`); `app/sw.js` has no background sending. An entry saved without signal waits until someone opens the app again.
+→ Add background sync (Android Chrome supports it), or say plainly "open the app when you have signal".
 
-**1. Two copies of the app open on one phone can erase entries. (S)**
-- Evidence: each copy loads the entry list once (`app/js/store.js:61`) and later writes its whole list back (`store.js:154`). Reproduced with the worker app and `/admin` open and no signal: a saved batch disappeared from the phone when the other copy saved a stock change, and never reached the sheet.
-- Fix: before every save, merge with what is in storage (newest version of each entry wins), and reload the list when the browser reports that storage changed.
+**8. The daily email is a one-time 8 pm snapshot. (Medium, S)**
+`google-sheet/server.js` sends once a day and marks the day done. Entries made or sent later never appear under "Today" in any email, and a day the timer misses is never sent.
+→ Send yesterday's final report each morning as well, and catch up on missed days.
 
-**2. On a weak signal the app takes about 20 seconds to open. (S)**
-- Evidence: measured 20.4 s for both apps with every file already saved, when the network accepts requests but does not answer. Normal network and airplane mode: 0.1 s. Cause: `app/sw.js:39,66-88` waits 4 s for the internet at each of five loading steps before using the saved copy.
-- Fix: open from the saved copy straight away and fetch updates in the background. Keep "internet first" only for `config.json`.
+**9. Nothing tells you when the Sheet script is older than the app. (Medium, S)**
+Forgetting "New version" when deploying leaves the old script running, and no screen shows it.
+→ Stamp a build number into both at build time, send it with every sync, and warn in Prism Admin when the Sheet's is older.
 
-**3. Changing Batches or Qty by hand in the Entries tab does not change raw material totals or stock. (S now, M properly)**
-- Evidence: totals and stock are read from the hidden "Raw material (data)" column (`google-sheet/server.js:351-356`). Test: Batches changed from 3 to 1; the report showed 1 batch but still 2.4 kg of Y1 used (should be 0.8) and 97.6 kg left (should be 99.2). The app tells workers to ask for this fix (`app/js/i18n.js:83`).
-- Fix now: change the app message and guide to "mark it DELETED and enter it again", and protect those columns. Properly: an "edit an older entry" screen in Prism Admin.
+**11. The phone screens have no automatic test. (Medium, M)**
+`tools/sheet-tests/` covers the Sheet script only. The fixes above were checked by hand with a real browser; nothing stops them breaking again.
+→ A small browser test set run on the Mac before each push (so it costs no build minutes): save a batch, the waste flow in both languages, offline then online, two copies open, stock numbers.
 
-### Medium
+**12b. Stock rules are written three times, and a deleted entry isn't undone offline. (Medium, M)**
+`app/js/report.js`, `app/js/screens/stock.js` and `dev_server.py` each have their own copy. With no signal, deleting an entry the sheet already has leaves the old amount in the figure on screen (it corrects itself as soon as the phone is online).
+→ One shared stock function used by the app, the sheet and the test server.
 
-**4. The big button in Waste / Spill shows the word "null". (S)**
-- Evidence: seen in both languages: "Enter how muchnull", "nullTap a reason", "nullकारण चुनें" (`app/js/screens/waste.js:199,325`).
-- Fix: leave the icon out instead of passing an empty value, as line 230 of the same file already does.
+**13. The Sheet is the only long-term copy, with no backup. (Medium, S)**
+Phones keep sent entries for 62 days (`app/js/store.js:12`) and have no way to send them again.
+→ A weekly automatic copy of the spreadsheet (keep the last 8), plus a "send everything on this phone again" button in Settings.
 
-**5. Stock and alert levels can be changed from a worker's phone without the PIN. (S)**
-- Evidence: only Settings asks for the PIN (`app/js/screens/settings.js:22-26`). On a phone that never entered the PIN, opening `/admin` let me remove 9 kg of Y1 and set its alert to 500. Long-pressing the worker app icon offers a "Report" shortcut straight to `/admin` (`app/manifest.webmanifest:18`).
-- Also: the PIN is sent to every phone and checked there (`server.js:277`, `settings.js:29`), with unlimited tries, so it is a light lock only.
-- Fix: ask for the PIN before stock and alert changes, and remove that shortcut. Later: a separate admin key that the Sheet itself checks.
+**18. Every sync re-reads the whole Entries tab. (Low, M — not urgent)**
+`google-sheet/server.js` reads all entries on every sync and every hour. From the code, not timed on Google: it will slow down over the years.
+→ Move finished years to an archive tab, or keep running stock totals.
 
-**6. A broken sheet link looks like "no internet", forever. (S)**
-- Evidence: only three errors count as a sheet problem (`app/js/sync.js:116`). With a link that no longer exists and the internet on, the phone showed "1 waiting · will send when internet is back". A wrong key shows the raw code "(bad-key)", also in Hindi (`app/js/main.js:118`).
-- Fix: if sending keeps failing while the phone is online (say for an hour), show the red "Sheet problem" line with the time of the last successful send, in plain words.
-
-**7. Entries only go to the sheet while the app is open on the screen. (M)**
-- Evidence: sending runs on timers inside the page (`app/js/sync.js:121-131`); `app/sw.js` has no background sending. An entry saved without signal waits until someone opens the app again.
-- Fix: add background sync (Android Chrome supports it), or change the wording to "open the app when you have signal".
-
-**8. The daily email is a one-time 8 pm snapshot. (S)**
-- Evidence: `server.js:650-664` sends once per day and marks the day done. Test: an entry sent after the email produced no second email. Entries made or sent later never appear under "Today" in any email, and a day the timer misses is never sent.
-- Fix: send yesterday's final report each morning (or add a "since the last email" section), and catch up on missed days.
-
-**9. Nothing tells you when the Sheet script is older than the app. (S)**
-- Evidence: forgetting "New version" when deploying keeps the old script running. The sync reply carries no version (`server.js:644`), the app ignores the one in the connection test (`settings.js:114`), and both numbers are typed by hand (`sync.js:5`, `server.js:7`).
-- Fix: stamp a build number into both at build time, send it with every sync, and warn in Prism Admin when the Sheet's is older.
-
-**10. Inserting a column in the Materials tab scrambles the materials on every phone. (S)**
-- Evidence: Materials is read by column position with no heading check (`server.js:190-206`). Test: one added column made R1's unit read "R1" and its bag size disappear; sync carried on, with misleading warnings about colors.
-- Fix: find the columns by their headings, as the Recipes tab already does.
-
-**11. The app has no automated tests. (M)**
-- Evidence: `tools/sheet-tests/` covers only the Sheet script. Findings 1, 4 and 12 are all in untested app code.
-- Fix: a small browser test set run on the Mac before each push (so it uses no build minutes): save a batch, the waste flow in both languages, offline then online, two copies open, stock numbers.
-
-**12. Stock rules are written three times and have already drifted; offline stock can be wrong. (M)**
-- Evidence: `app/js/report.js:207-248`, `app/js/screens/stock.js:35-85`, `dev_server.py:74-119`. Without signal, a spoiled batch marked "already recorded" was taken off stock again (92 kg shown as 90.4, `stock.js:35-40`), and a deleted 50 kg stock entry still counted (`stock.js:66`). Both corrected themselves once online.
-- Fix: one shared stock function used by the app, the sheet and the test server.
-
-**13. The Sheet is the only long-term copy, with no backup. (S)**
-- Evidence: phones keep sent entries for 62 days (`store.js:12,237-242`) and have no way to send them again.
-- Fix: a weekly automatic copy of the spreadsheet (keep the last 8), plus a "send everything on this phone again" button in Settings.
-
-### Low
-
-**14. Text starting with "=" can become a live formula in the Sheet. (S)**
-- Evidence: these columns are not stored as plain text: Material, Unit and "Raw material used" in Entries (`server.js:44`); Material, Product, Worker and Phone in Material Use (`server.js:445`); Worker in Phones (`server.js:557`). The worker name is typed freely on the phone (`app/js/screens/who.js:31`). Needs a phone that has the key.
-- Fix: store every text column as plain text.
-
-**15. The Sheet accepts impossible entries. (S)**
-- Evidence: `server.js:287-293`. Test: a waste entry of −500 kg added 500 kg to stock; an entry dated 2031 was accepted and then appeared in no report. Dates and times come from each phone's own clock and are never compared with the Sheet's.
-- Fix: reject negative amounts and dates more than a few days off, and list rejected entries in the daily email.
-
-**16. Old or test phones stay in the email as "NOT sent today" forever. (S)**
-- Evidence: every row of the Phones tab is checked (`app/js/report.js:518-523`). Test: three warnings still present 30 days later.
-- Fix: warn only about phones seen in the last 7 days.
-
-**17. The guides contradict the code. (S)**
-- Evidence: `google-sheet/SETUP.md:59` recommends putting the link and key in `config.json` "before building the Android app"; the website build removes them (`tools/make_website.py:62,89`) and the key would end up in GitHub. `README.md:119` says stock is not in this version; `README.md:93` mentions an Android app.
-- Fix: update the three guides.
-
-**18. Every sync re-reads the whole Entries tab. (M, not urgent)**
-- Evidence: `server.js:449-454,495-498,633-635`, and again every hour (`server.js:657`). From the code, not timed on Google: it will slow down over the years.
-- Fix: move finished years to an archive tab, or keep running stock totals.
-
-**19. Amounts are rounded to 3 decimals for every entry. (S)**
-- Evidence: `app/js/recipes.js:26-28,65`. A recipe amount of 0.0025 kg is saved as 0.003 for one batch; 0.0004 kg is saved as 0.
-- Fix: only matters if a recipe has amounts under about 5 g per batch. If so, keep more decimals or use grams.
-
-**20. Hindi wording and first start. (S)**
-- Evidence: the home button says "बैच बनाए" but the spoiled-batch question and the report say "बैच बने" (`app/js/i18n.js:198,241`, `app/js/report.js:99`). A phone set to Hindi still starts in English (`app/js/main.js:151`). Back is "वापस" and Undo is "वापस लें".
-- Fix: one name for "Batches made" everywhere, start in Hindi on Hindi phones, and have a native speaker read every line once.
-
-**21. Small touch targets and pop-ups. (S)**
-- Evidence at 360×640: Back, light/dark and language buttons are 40 px high and "Change" is 36 px (`app/css/app.css:118,201`); the usual minimum is 48. With the "Delete this entry?" box open, the phone's Back button leaves the page (it went to Home) instead of only closing the box (`app/js/ui.js:47-72`). Some report text is under 13 px. Screen-reader labels are in English only.
-- Fix: raise those buttons to 48 px, make Back only close the pop-up, translate the labels.
-
-**22. The public website shows more than it needs to. (S)**
-- Evidence: `site/config.json` holds the default PIN, the workers' first names, the material codes and (demo build) the sample recipes. Nothing asks search engines to stay away (`site/_headers`).
-- Fix: add a "noindex" header, leave worker names out of the website copy, and build without `--demo` once real recipes exist.
+**19. Amounts are rounded to 3 decimals. (Low, S)**
+A recipe amount of 0.0025 kg is saved as 0.003 for one batch; 0.0004 kg is saved as 0.
+→ Only matters if a recipe has amounts under about 5 g per batch. If so, keep more decimals or use grams.
 
 ## Checked, no problem found
 
 - Sending the same entry twice, editing during a send, delete and undo: no duplicate rows, newest version wins.
-- The secret key and real recipes are not in the website copy; the build refuses to include the key.
-- `Code.gs` and `site/` match their sources today.
+- The secret key and real recipes are not in the website copy; the build refuses to include them.
+- `Code.gs` and `site/` match their sources.
 - Text in the email and on screen is escaped, so entered text cannot run as code there.
-- Full phone storage gives a clear "not saved" message. The app opens in airplane mode. Email use is far below Google's 100 a day.
+- Full phone storage gives a clear "not saved" message. The app opens and records in airplane mode. Email use is far below Google's 100 a day.

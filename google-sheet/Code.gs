@@ -450,7 +450,7 @@ const REPORT_TEXT = {
     sentToday: '\u0906\u091c \u092d\u0947\u091c\u093e',
     notToday: '\u0906\u091c \u0928\u0939\u0940\u0902 \u092d\u0947\u091c\u093e',
     spoiled: '\u0916\u0930\u093e\u092c \u092c\u0948\u091a',
-    madeBefore: '\u092a\u0939\u0932\u0947 \u0939\u0940 "\u092c\u0948\u091a \u092c\u0928\u0947" \u092e\u0947\u0902 \u0917\u093f\u0928\u093e',
+    madeBefore: '\u092a\u0939\u0932\u0947 \u0939\u0940 "\u092c\u0948\u091a \u092c\u0928\u093e\u090f" \u092e\u0947\u0902 \u0917\u093f\u0928\u093e',
     warnings: '\u0930\u0947\u0938\u093f\u092a\u0940 \u0936\u0940\u091f \u092e\u0947\u0902 \u0917\u0932\u0924\u093f\u092f\u093e\u0901',
     openSheet: '\u0917\u0942\u0917\u0932 \u0936\u0940\u091f \u0916\u094b\u0932\u0947\u0902',
     footer: 'Prism \u091f\u094d\u0930\u0948\u0915\u0930 \u0938\u0947 \u0905\u092a\u0928\u0947-\u0906\u092a \u092d\u0947\u091c\u093e \u0917\u092f\u093e\u0964',
@@ -480,12 +480,20 @@ function buildReportModel(opts) {
   );
   const dayList = live.filter((e) => e.date === date);
   const monthList = live.filter((e) => e.date.slice(0, 7) === monthKey && e.date <= date);
-  const phones = (opts.phones || []).map((p) => ({
-    phone: String(p.phone || ''),
-    lastSync: String(p.lastSync || ''),
-    worker: String(p.worker || ''),
-    sentToday: String(p.lastSync || '').slice(0, 10) === date,
-  }));
+  // A phone that was last used months ago (an old handset, a test) should not warn
+  // every single day forever, so only phones seen in the last week are warned about.
+  const seenFrom = addDays(date, -7);
+  const phones = (opts.phones || []).map((p) => {
+    const lastSync = String(p.lastSync || '');
+    const day = lastSync.slice(0, 10);
+    return {
+      phone: String(p.phone || ''),
+      lastSync,
+      worker: String(p.worker || ''),
+      sentToday: day === date,
+      recent: day >= seenFrom && day <= date,
+    };
+  });
   // Day-by-day totals from the 1st of the month up to the report date (for the trend lines).
   const days = [];
   for (let d = monthKey + '-01'; d <= date; d = addDays(d, 1)) days.push(d);
@@ -870,7 +878,7 @@ function renderReportHtml(model, lang) {
     s += '<div style="' + RS.warn + '">\u26a0\ufe0f ' + escapeHtml(L.warnings) + ': ' + escapeHtml(w) + '</div>';
   });
   model.phones
-    .filter((p) => !p.sentToday)
+    .filter((p) => !p.sentToday && p.recent)
     .forEach((p) => {
       s += '<div style="' + RS.warn + '">\u26a0\ufe0f ' + escapeHtml(p.phone) + ': ' + escapeHtml(L.notToday) +
         (p.lastSync ? ' (' + escapeHtml(L.lastSent) + ' ' + escapeHtml(p.lastSync) + ')' : '') + '</div>';
@@ -951,7 +959,7 @@ function renderReportText(model, lang) {
     out.push('');
   }
   period(L.month, model.month, false);
-  model.phones.filter((p) => !p.sentToday).forEach((p) => out.push('! ' + p.phone + ': ' + L.notToday));
+  model.phones.filter((p) => !p.sentToday && p.recent).forEach((p) => out.push('! ' + p.phone + ': ' + L.notToday));
   return out.join('\n');
 }
 
@@ -999,9 +1007,14 @@ const ENTRY_COLS = [
   ['linesJson', 'Raw material (data)'],
   ['madeBefore', 'Already made'], // spoiled batch already recorded as made: not taken off stock again
 ];
-const ENTRY_TEXT_FIELDS = ['date', 'time', 'id', 'createdAt', 'updatedAt', 'linesJson', 'entered', 'note', 'product', 'worker', 'phone'];
+// Everything but the two number columns is written as plain text, so a value that
+// starts with "=" is stored as the words it is and never runs as a formula.
+const ENTRY_NUMBER_FIELDS = ['batches', 'qty'];
+const ENTRY_TEXT_FIELDS = ENTRY_COLS.map((c) => c[0]).filter((f) => ENTRY_NUMBER_FIELDS.indexOf(f) < 0);
 const USE_HEADERS = ['Date', 'Type', 'Material', 'Qty', 'Unit', 'Product', 'Reason', 'Worker', 'Phone', 'Entry ID'];
+const USE_TEXT_COLS = [1, 2, 3, 5, 6, 7, 8, 9, 10]; // every column but Qty
 const PHONE_HEADERS = ['Phone', 'Last sync', 'Worker', 'App version'];
+const PHONE_TEXT_COLS = [1, 2, 3, 4];
 const MATERIAL_HEADERS = ['Code', 'Name', 'Name (Hindi)', 'Unit', 'Container', 'Container (Hindi)', 'Container size', 'Color', 'Low stock alert'];
 const LOW_STOCK_COL = 9; // Materials column with the alert level
 const STOCK_HEADERS = ['Material', 'Unit', 'Counted since', 'Added', 'Removed', 'Used in batches', 'Wasted', 'Left', 'Alert below', 'Status', 'Updated'];
@@ -1099,6 +1112,19 @@ function colOf_(field) {
   throw new Error('unknown column ' + field);
 }
 
+// Finds an owner-edited tab's columns by their heading, so inserting a column
+// (a supplier, a price) doesn't shift what every phone reads. A heading that
+// isn't there falls back to the place it used to be.
+function headerMap_(sh, headers) {
+  const head = sh.getRange(1, 1, 1, Math.max(headers.length, sh.getLastColumn())).getValues()[0].map(str_);
+  const at = {};
+  headers.forEach((name, i) => {
+    const j = head.indexOf(name);
+    at[name] = j >= 0 ? j : i;
+  });
+  return at;
+}
+
 // ---------------- settings & config ----------------
 
 function readSettings_() {
@@ -1145,22 +1171,30 @@ function readConfig_() {
   const mSh = ss.getSheetByName(TAB.materials);
   if (mSh && mSh.getLastRow() > 1) {
     const width = Math.max(MATERIAL_HEADERS.length, mSh.getLastColumn());
+    const at = headerMap_(mSh, MATERIAL_HEADERS);
+    const head = mSh.getRange(1, 1, 1, width).getValues()[0].map(str_);
+    MATERIAL_HEADERS.forEach((name) => {
+      // The alert column is added later on sheets made before stock tracking.
+      if (name !== 'Low stock alert' && head.indexOf(name) < 0) warnings.push('Materials: the "' + name + '" column heading is missing or renamed.');
+    });
+    const cell = (r, name) => (at[name] < r.length ? r[at[name]] : '');
     mSh.getRange(2, 1, mSh.getLastRow() - 1, width).getValues().forEach((r) => {
-      const code = str_(r[0]);
+      const code = str_(cell(r, 'Code'));
       if (!code) return;
-      const size = num(r[6]);
-      const color = str_(r[7]);
-      const low = r[8] === '' || r[8] == null ? 0 : Number(r[8]);
-      if (isNaN(low) || low < 0) warnings.push('Materials "' + code + '": low stock alert "' + r[8] + '" is not a number.');
+      const size = num(cell(r, 'Container size'));
+      const color = str_(cell(r, 'Color'));
+      const rawLow = cell(r, 'Low stock alert');
+      const low = rawLow === '' || rawLow == null ? 0 : Number(rawLow);
+      if (isNaN(low) || low < 0) warnings.push('Materials "' + code + '": low stock alert "' + rawLow + '" is not a number.');
       if (color && !cleanColor(color)) warnings.push('Materials "' + code + '": color "' + color + '" should look like #00F5A0.');
       materials.push({
         code,
-        name: str_(r[1]) || code,
-        name_hi: str_(r[2]),
-        unit: str_(r[3]) || 'kg',
+        name: str_(cell(r, 'Name')) || code,
+        name_hi: str_(cell(r, 'Name (Hindi)')),
+        unit: str_(cell(r, 'Unit')) || 'kg',
         color: cleanColor(color),
         lowStock: low > 0 ? low : 0,
-        containers: size > 0 ? [{ name: str_(r[4]) || 'Container', name_hi: str_(r[5]), size }] : [],
+        containers: size > 0 ? [{ name: str_(cell(r, 'Container')) || 'Container', name_hi: str_(cell(r, 'Container (Hindi)')), size }] : [],
       });
     });
   }
@@ -1237,18 +1271,29 @@ function readConfig_() {
 
 // ---------------- entries ----------------
 
+// A phone's own clock can be wrong, and the app can only ever record today or
+// yesterday. A date far outside that is treated like a broken one: the sheet's
+// own today, so the entry still lands somewhere the owner will see it.
+function safeDate_(value) {
+  const text = String(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return todayText_();
+  const today = todayText_();
+  return text > addDays(today, 2) || text < addDays(today, -400) ? today : text;
+}
+
 function cleanEntry_(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const id = String(raw.id || '').slice(0, 64);
   if (!id) return null;
   const type = raw.type === 'waste' || raw.type === 'stock' ? raw.type : 'production';
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(raw.date)) ? String(raw.date) : todayText_();
+  const date = safeDate_(raw.date);
   const s = (v, max) => String(v == null ? '' : v).slice(0, max || 200);
-  const n = (v) => (v === '' || v == null || isNaN(Number(v)) ? '' : Number(v));
+  // Amounts are never negative: a negative waste would ADD to stock.
+  const n = (v) => (v === '' || v == null || isNaN(Number(v)) ? '' : Math.max(0, Number(v)));
   const lines = (Array.isArray(raw.lines) ? raw.lines : [])
     .filter((l) => l && l.material)
     .slice(0, 50)
-    .map((l) => ({ material: s(l.material, 20), qty: Number(l.qty) || 0, unit: s(l.unit, 10) }));
+    .map((l) => ({ material: s(l.material, 20), qty: Math.max(0, Number(l.qty) || 0), unit: s(l.unit, 10) }));
   return {
     id,
     type,
@@ -1278,6 +1323,37 @@ function typeLabel_(e) {
   return e.type === 'waste' ? TYPE_LABELS.waste : TYPE_LABELS.production;
 }
 
+// The phones work the raw material out from one number: the batch count, or the
+// quantity for a raw material. Storing that number beside the lines lets the sheet
+// follow an owner who corrects Batches or Qty by hand in the Entries tab.
+function linesBasis_(type, material, batches, qty) {
+  if (type === 'production' || (type === 'waste' && !material)) return Number(batches) || 0;
+  return Number(qty) || 0;
+}
+
+function linesToJson_(e) {
+  return JSON.stringify({ n: linesBasis_(e.type, e.material, e.batches, e.qty), l: e.lines });
+}
+
+// Reads both shapes: the plain list written by earlier versions, and { n, l }, whose
+// amounts are scaled when Batches / Qty has been edited in the sheet since.
+function linesFromJson_(text, basis) {
+  let raw;
+  try {
+    raw = JSON.parse(String(text || '[]'));
+  } catch (err) {
+    return [];
+  }
+  if (Array.isArray(raw)) return raw; // written before this version: an edit cannot be followed
+  const lines = Array.isArray(raw.l) ? raw.l : [];
+  const was = Number(raw.n) || 0;
+  if (!(was > 0) || !(basis > 0) || basis === was) return lines;
+  const factor = basis / was;
+  return lines.map(function (l) {
+    return { material: l.material, qty: round3((Number(l.qty) || 0) * factor), unit: l.unit };
+  });
+}
+
 function entryToRow_(e) {
   const v = {
     date: e.date,
@@ -1298,7 +1374,7 @@ function entryToRow_(e) {
     id: e.id,
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
-    linesJson: JSON.stringify(e.lines),
+    linesJson: linesToJson_(e),
     madeBefore: e.madeBefore ? 'Yes' : '',
   };
   return ENTRY_COLS.map((c) => (v[c[0]] == null ? '' : v[c[0]]));
@@ -1306,24 +1382,22 @@ function entryToRow_(e) {
 
 function rowToEntry_(r) {
   const get = (field) => r[colOf_(field) - 1];
-  let lines = [];
-  try {
-    lines = JSON.parse(String(get('linesJson') || '[]'));
-  } catch (e) {
-    lines = [];
-  }
   const label = String(get('type')).trim().toLowerCase();
   const type = label === 'waste' ? 'waste' : label.indexOf('stock') === 0 ? 'stock' : 'production';
   const num = (v) => (v === '' || v == null ? null : Number(v));
+  const batches = num(get('batches'));
+  const qty = num(get('qty'));
+  const material = str_(get('material'));
+  const lines = linesFromJson_(get('linesJson'), linesBasis_(type, material, batches, qty));
   return {
     id: str_(get('id')),
     date: str_(get('date')),
     time: str_(get('time')),
     type,
     product: str_(get('product')),
-    batches: num(get('batches')),
-    material: str_(get('material')),
-    qty: num(get('qty')),
+    batches,
+    material,
+    qty,
     unit: str_(get('unit')),
     entered: str_(get('entered')),
     reason: type === 'waste' ? reasonKeyFromLabel(get('reason')) : '',
@@ -1400,7 +1474,7 @@ function upsertEntries_(rawEntries) {
       if (replacedIds[String(ids[i][0])]) useSh.deleteRow(i + 2);
     }
   }
-  writeRows_(useSh, useSh.getLastRow() + 1, useRows, [1, 10]);
+  writeRows_(useSh, useSh.getLastRow() + 1, useRows, USE_TEXT_COLS);
   return saved;
 }
 
@@ -1445,7 +1519,7 @@ function writeStockTab_(stock) {
     stamp,
   ]);
   if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, STOCK_HEADERS.length).clearContent();
-  writeRows_(sh, 2, rows, [1, 3, 11]);
+  writeRows_(sh, 2, rows, [1, 2, 3, 10, 11]); // every column but the numbers
 }
 
 // Refreshes the Stock tab and emails once when a material falls below its alert
@@ -1487,19 +1561,26 @@ function setLowStock_(req) {
   const sh = getSS_().getSheetByName(TAB.materials);
   const last = sh ? sh.getLastRow() : 0;
   if (last < 2) return { ok: false, error: 'unknown-material' };
-  const codes = sh.getRange(2, 1, last - 1, 1).getValues();
+  const at = headerMap_(sh, MATERIAL_HEADERS);
+  const codes = sh.getRange(2, at.Code + 1, last - 1, 1).getValues();
   for (let i = 0; i < codes.length; i++) {
     if (str_(codes[i][0]) === code) {
       ensureLowStockHeader_(sh);
-      sh.getRange(i + 2, LOW_STOCK_COL).setValue(raw === 0 ? '' : raw);
+      sh.getRange(i + 2, lowStockCol_(sh)).setValue(raw === 0 ? '' : raw);
       return { ok: true, config: readConfig_() };
     }
   }
   return { ok: false, error: 'unknown-material' };
 }
 
+// Where the alert level lives now, which is not column 9 once a column was inserted.
+function lowStockCol_(sh) {
+  return headerMap_(sh, MATERIAL_HEADERS)[MATERIAL_HEADERS[LOW_STOCK_COL - 1]] + 1;
+}
+
 // Sheets made before stock tracking have no alert column yet.
 function ensureLowStockHeader_(sh) {
+  if (lowStockCol_(sh) !== LOW_STOCK_COL) return; // it exists, just somewhere else
   const cell = sh.getRange(1, LOW_STOCK_COL);
   if (!str_(cell.getValue())) cell.setValue(MATERIAL_HEADERS[LOW_STOCK_COL - 1]).setFontWeight('bold').setBackground('#e2e8f0');
 }
@@ -1512,12 +1593,12 @@ function touchPhone_(phone, worker, version) {
     const names = sh.getRange(2, 1, last - 1, 1).getValues();
     for (let i = 0; i < names.length; i++) {
       if (String(names[i][0]) === row[0]) {
-        writeRows_(sh, i + 2, [row], [1, 2, 4]);
+        writeRows_(sh, i + 2, [row], PHONE_TEXT_COLS);
         return;
       }
     }
   }
-  writeRows_(sh, last + 1, [row], [1, 2, 4]);
+  writeRows_(sh, last + 1, [row], PHONE_TEXT_COLS);
 }
 
 function readPhones_() {

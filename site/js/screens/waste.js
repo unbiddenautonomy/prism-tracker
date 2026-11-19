@@ -196,7 +196,7 @@ function materialAmount(m) {
     const qty = materialQty(m);
     convert.textContent = c && qty ? '= ' + fmtNum(qty) + ' ' + m.unit : '';
     nextBtn.disabled = !(qty > 0);
-    nextBtn.replaceChildren(qty > 0 ? t('next') : t('enterAmount'), qty > 0 ? icon('next', 20, 2.25) : null);
+    nextBtn.replaceChildren(...(qty > 0 ? [t('next'), icon('next', 20, 2.25)] : [t('enterAmount')]));
   }
 
   const body = [];
@@ -322,8 +322,8 @@ function reasonStep() {
     const needNote = draft.reason === 'other' && !draft.note.trim();
     saveBtn.disabled = !draft.reason || needNote;
     const ready = draft.reason && !needNote;
-    saveBtn.replaceChildren(ready ? icon('check', 20, 2.25) : null,
-      !draft.reason ? t('pickReason') : needNote ? t('otherNeedsNote') : draft.editId ? t('saveChanges') : t('saveWaste'));
+    const label = !draft.reason ? t('pickReason') : needNote ? t('otherNeedsNote') : draft.editId ? t('saveChanges') : t('saveWaste');
+    saveBtn.replaceChildren(...(ready ? [icon('check', 20, 2.25)] : []), label);
     noteHint.textContent = needNote ? t('otherNeedsNote') : '';
   }
 

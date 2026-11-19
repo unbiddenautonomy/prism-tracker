@@ -67,6 +67,20 @@ export async function init() {
     write(KEYS.settings, settings);
   }
   prune();
+  watchOtherCopies();
+}
+
+// Another copy of the app saved something (Prism and Prism Admin open together, or
+// two tabs). What is in storage is the whole truth, because every copy merges before
+// it writes, so take it as it is — including an empty list after "delete all entries",
+// which merging would quietly undo.
+function watchOtherCopies() {
+  window.addEventListener('storage', (ev) => {
+    if (ev.key && ev.key !== KEYS.entries) return;
+    const stored = read(KEYS.entries, []);
+    entries = Array.isArray(stored) ? stored : [];
+    emit();
+  });
 }
 
 // ---- Config (recipes, materials, workers) ----
@@ -151,7 +165,43 @@ function laterThan(prevIso) {
   return now.toISOString();
 }
 
-function persist() {
+// Two copies of the app can be open at once on one phone (for example Prism and
+// Prism Admin, or two browser tabs). Each has its own list in memory, so writing
+// that list straight out would erase whatever the other copy saved meanwhile.
+// Every write is therefore merged with what is in storage first.
+function newerOf(a, b) {
+  const keep = String(b.updatedAt || '') >= String(a.updatedAt || '') ? b : a;
+  const other = keep === b ? a : b;
+  const merged = Object.assign({}, keep);
+  // "Already sent" is remembered from whichever copy heard back from the sheet.
+  if (!merged.sentUpdatedAt && other.sentUpdatedAt && other.sentUpdatedAt === merged.updatedAt) {
+    merged.sentUpdatedAt = other.sentUpdatedAt;
+  }
+  return merged;
+}
+
+function mergeWithStored(list) {
+  const stored = read(KEYS.entries, []);
+  if (!Array.isArray(stored) || !stored.length) return list.slice();
+  const byId = new Map();
+  const order = [];
+  const put = (e) => {
+    if (!e || !e.id) return;
+    const old = byId.get(e.id);
+    if (old) byId.set(e.id, newerOf(old, e));
+    else {
+      byId.set(e.id, e);
+      order.push(e.id);
+    }
+  };
+  stored.forEach(put);
+  list.forEach(put);
+  return order.map((id) => byId.get(id));
+}
+
+// replaceAll: this copy's list IS the whole truth (clearing or pruning), so skip the merge.
+function persist(replaceAll) {
+  if (!replaceAll) entries = mergeWithStored(entries);
   return write(KEYS.entries, entries);
 }
 
@@ -178,9 +228,10 @@ export function addEntry(fields) {
     },
     fields
   );
-  entries.push(e);
+  const prev = entries;
+  entries = entries.concat([e]);
   if (!persist()) {
-    entries.pop();
+    entries = prev;
     throw new Error('storage-full');
   }
   emit();
@@ -191,14 +242,16 @@ export function updateEntry(id, patch) {
   const e = getEntry(id);
   if (!e) return null;
   const before = Object.assign({}, e);
+  const prev = entries;
   Object.assign(e, patch, { updatedAt: laterThan(e.updatedAt) });
   if (!persist()) {
+    entries = prev;
     Object.keys(e).forEach((k) => delete e[k]);
     Object.assign(e, before);
     throw new Error('storage-full');
   }
   emit();
-  return e;
+  return getEntry(id) || e;
 }
 
 // Entries are never removed straight away: they are marked deleted so the
@@ -237,14 +290,16 @@ export function todayEntries() {
 function prune() {
   const cutoff = addDays(localYmd(), -KEEP_SENT_DAYS);
   const before = entries.length;
-  entries = entries.filter((e) => e.sentUpdatedAt !== e.updatedAt || String(e.date) >= cutoff);
-  if (entries.length !== before) persist();
+  // Merge first: another copy may have saved something between this copy's read and
+  // this write, and pruning writes the whole list out.
+  entries = mergeWithStored(entries).filter((e) => e.sentUpdatedAt !== e.updatedAt || String(e.date) >= cutoff);
+  if (entries.length !== before) persist(true);
 }
 
 // Removes entries and the worker name; keeps phone name, language and sheet link.
 export function clearEntries() {
   entries = [];
-  persist();
+  persist(true);
   clearSheetConfig();
   delete settings.worker;
   write(KEYS.settings, settings);

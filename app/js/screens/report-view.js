@@ -134,8 +134,9 @@ function phonesPanel(model, L) {
   return h('div', { class: 'panel glass' },
     h('div', { class: 'panel-title' }, L.phones),
     model.phones.map((p) => h('div', { class: 'rrow' },
-      h('div', { class: 'rrow-name' }, h('span', { class: 'dot', style: { '--c': p.sentToday ? EMERALD() : AMBER() } }), h('span', null, p.phone)),
-      h('div', { class: 'rrow-val num' }, h('small', null, friendlyTime(p.lastSync) + (p.sentToday ? '' : ' · ' + L.notToday))))));
+      // Grey, with no warning, for a phone nobody has used for over a week.
+      h('div', { class: 'rrow-name' }, h('span', { class: 'dot', style: { '--c': p.sentToday ? EMERALD() : p.recent ? AMBER() : 'var(--text-3)' } }), h('span', null, p.phone)),
+      h('div', { class: 'rrow-val num' }, h('small', null, friendlyTime(p.lastSync) + (!p.sentToday && p.recent ? ' · ' + L.notToday : ''))))));
 }
 
 // "2026-11-03 01:09" -> "Today 01:09" / "2 Nov 18:40"
@@ -239,9 +240,9 @@ export function reportScreen() {
       h(
         'div',
         { class: 'report-nav glass' },
-        h('button', { class: 'icon-btn', 'aria-label': 'previous day', onclick: () => shift(-1) }, icon('back', 20, 2)),
+        h('button', { class: 'icon-btn', 'aria-label': t('prevDay'), onclick: () => shift(-1) }, icon('back', 20, 2)),
         h('div', { class: 'report-date' }, prettyDate(day, lang)),
-        h('button', { class: 'icon-btn', 'aria-label': 'next day', disabled: day >= today, onclick: () => shift(1) }, icon('next', 20, 2))
+        h('button', { class: 'icon-btn', 'aria-label': t('nextDay'), disabled: day >= today, onclick: () => shift(1) }, icon('next', 20, 2))
       ),
       source,
       out,

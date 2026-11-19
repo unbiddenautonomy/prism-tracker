@@ -5,12 +5,14 @@ import * as store from './store.js';
 export const APP_VERSION = '0.2.0';
 const BATCH_SIZE = 200;
 const TIMEOUT_MS = 25000;
+const STUCK_MS = 60 * 60 * 1000; // failing this long while the phone has internet is a real problem
 
 let state = 'idle'; // idle | local | sending | ok | waiting | error
 let lastError = '';
 let inFlight = null;
 let runAgain = false;
 let lastConfigPull = 0;
+let failingSince = 0;
 const statusListeners = new Set();
 const configListeners = new Set();
 
@@ -108,13 +110,18 @@ async function run(pullConfig) {
       if (store.setSheetConfig(data.config)) configListeners.forEach((fn) => fn());
     }
     if (pending.length > BATCH_SIZE) runAgain = true;
+    failingSince = 0;
     setState(store.pendingEntries().length ? 'waiting' : 'ok');
   } catch (err) {
     const msg = String((err && err.message) || err);
     console.warn('Sync failed:', msg);
     // A wrong key or broken sheet needs a person; anything else is probably just no internet.
     const needsPerson = msg === 'bad-key' || msg === 'not-a-prism-sheet' || msg.indexOf('sheet-columns') === 0;
-    setState(needsPerson ? 'error' : 'waiting', msg);
+    if (!failingSince) failingSince = Date.now();
+    // Still not getting through after an hour, with the phone online: the link is
+    // wrong or the sheet is gone. Saying "waiting for internet" forever hides that.
+    const stuck = navigator.onLine !== false && Date.now() - failingSince > STUCK_MS;
+    setState(needsPerson || stuck ? 'error' : 'waiting', msg);
   }
 }
 

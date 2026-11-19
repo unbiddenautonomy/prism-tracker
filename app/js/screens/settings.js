@@ -7,9 +7,8 @@ import * as nav from '../nav.js';
 import * as sync from '../sync.js';
 import { languagePicker } from './who.js';
 import { icon } from '../icons.js';
+import * as lock from '../lock.js';
 
-const UNLOCK_MINUTES = 10;
-let unlockedUntil = 0;
 let testMessage = { text: '', cls: '' }; // kept so it survives the screen refreshing
 
 function when(iso) {
@@ -20,53 +19,9 @@ function when(iso) {
 }
 
 export function settingsScreen() {
-  if (Date.now() > unlockedUntil) return pinScreen();
-  unlockedUntil = Date.now() + UNLOCK_MINUTES * 60 * 1000;
+  if (!lock.isUnlocked()) return lock.pinScreen({ flow: t('settings'), goTo: 'settings' });
+  lock.keepUnlocked();
   return settingsBody();
-}
-
-function pinScreen() {
-  const pin = String(store.getConfig().ownerPin || '1234');
-  let typed = '';
-  const dots = h('div', { class: 'pin-dots' });
-  const msg = h('div', { class: 'pin-msg', role: 'alert' });
-  const draw = () =>
-    dots.replaceChildren(...Array.from({ length: pin.length }, (_, i) => h('span', { class: 'pin-dot' + (i < typed.length ? ' on' : '') })));
-  const press = (k) => {
-    if (k === '⌫') typed = typed.slice(0, -1);
-    else if (k) typed += k;
-    draw();
-    if (typed.length >= pin.length) {
-      if (typed === pin) {
-        unlockedUntil = Date.now() + UNLOCK_MINUTES * 60 * 1000;
-        nav.replace('settings');
-      } else {
-        msg.textContent = t('pinWrong');
-        dots.classList.add('shake');
-        setTimeout(() => {
-          typed = '';
-          dots.classList.remove('shake');
-          draw();
-        }, 450);
-      }
-    }
-  };
-  draw();
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
-  return {
-    flow: t('settings'),
-    tone: 'slate',
-    heading: t('pinTitle'),
-    sub: t('pinHelp'),
-    body: [
-      dots,
-      msg,
-      h('div', { class: 'numpad numpad-pin' }, keys.map((k) =>
-        k ? h('button', { class: 'numkey' + (k === '⌫' ? ' numkey-back' : ''), 'aria-label': k === '⌫' ? 'delete' : k, onclick: () => press(k) },
-          k === '⌫' ? icon('backspace', 24) : k) : h('span')
-      )),
-    ],
-  };
 }
 
 function section(iconName, title, ...kids) {
@@ -155,7 +110,7 @@ function settingsBody() {
     if (!ok) return;
     store.clearEntries();
     toast(t('setCleared'));
-    unlockedUntil = 0;
+    lock.lock();
     nav.goHome();
   } }, icon('trash', 18), t('setClear'));
 
@@ -201,7 +156,7 @@ function settingsBody() {
         clearBtn
       ),
       h('button', { class: 'btn', onclick: () => {
-        unlockedUntil = 0;
+        lock.lock();
         nav.goHome();
       } }, icon('lock', 18), t('setLock')),
       h('p', { class: 'hint center' }, t('setVersion', { v: sync.APP_VERSION })),

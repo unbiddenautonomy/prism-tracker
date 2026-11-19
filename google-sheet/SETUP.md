@@ -54,16 +54,13 @@ Back in the Sheet, you now have these tabs:
 
 ## 5. Tell the app where the Sheet is
 
-Pick one of these:
+Do this once on each phone:
 
-- **Every phone at once (recommended):** put the link and key in `app/config.json` before building the Android app:
-  ```json
-  "sheet": { "url": "https://script.google.com/macros/s/…/exec", "key": "the secret key" },
-  ```
-- **One phone at a time:**
-  1. On the phone, open **⚙ Settings** and enter the PIN (1234 to start).
-  2. Paste the **Sheet link** and the **Secret key**.
-  3. Tap **Save and test**. You should see ✅ Connected.
+1. On the phone, open **⚙ Settings** and enter the PIN (1234 to start).
+2. Paste the **Sheet link** and the **Secret key**.
+3. Tap **Save and test**. You should see ✅ Connected.
+
+The link and key are deliberately **not** built into the website: every file on a website can be downloaded by anyone who has the address. `app/config.json` has a `"sheet"` entry for testing on your own computer only — `tools/make_website.py` always empties it in the published copy.
 
 To see the key again later, use the **Prism** menu in the Sheet → **Show secret key**. (Reload the Sheet once if the menu isn't there yet.)
 
@@ -106,6 +103,10 @@ The email also has a **Raw material stock** section, once stock has been added i
   3. An automatic neon color, if both are blank
 - **Fix wrong stock:** in the admin app, open the material and either delete the wrong change or add/remove the difference.
 - **Cancel a wrong entry from an earlier day:** in **Entries**, change its **Status** to `DELETED`. Reports and the email then ignore it. Also delete its rows in **Material Use**, which share the same Entry ID. Today's entries can be fixed on the phone itself.
+- **Correct a number from an earlier day:** in **Entries**, change **Batches** (or **Qty** for a raw material). The **reports, the stock and the daily email** follow the new number by themselves.
+  - Two places do **not** follow it: the readable **Raw material used** column, and the **Material Use** tab. They still show what was first recorded. If you build pivot tables on **Material Use**, cancel the entry (Status `DELETED`) and re-enter it instead of correcting the number.
+  - The totals come from the hidden **Raw material (data)** column, so leave that one alone.
+  - Entries made before this was added keep their old amounts; cancel and re-enter those too.
 - **Don't rename, move or delete columns** in Entries, Material Use or Phones. If that happens, phones stop sending and show "Sheet problem" until it's fixed. Their entries wait safely on the phone in the meantime. Build your own summaries in new tabs instead.
 
 If something in the Recipes tab is wrong (text instead of a number, a column code that isn't in Materials), it's listed:

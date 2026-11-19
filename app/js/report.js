@@ -96,7 +96,7 @@ export const REPORT_TEXT = {
     sentToday: 'आज भेजा',
     notToday: 'आज नहीं भेजा',
     spoiled: 'खराब बैच',
-    madeBefore: 'पहले ही "बैच बने" में गिना',
+    madeBefore: 'पहले ही "बैच बनाए" में गिना',
     warnings: 'रेसिपी शीट में गलतियाँ',
     openSheet: 'गूगल शीट खोलें',
     footer: 'Prism ट्रैकर से अपने-आप भेजा गया।',
@@ -126,12 +126,20 @@ export function buildReportModel(opts) {
   );
   const dayList = live.filter((e) => e.date === date);
   const monthList = live.filter((e) => e.date.slice(0, 7) === monthKey && e.date <= date);
-  const phones = (opts.phones || []).map((p) => ({
-    phone: String(p.phone || ''),
-    lastSync: String(p.lastSync || ''),
-    worker: String(p.worker || ''),
-    sentToday: String(p.lastSync || '').slice(0, 10) === date,
-  }));
+  // A phone that was last used months ago (an old handset, a test) should not warn
+  // every single day forever, so only phones seen in the last week are warned about.
+  const seenFrom = addDays(date, -7);
+  const phones = (opts.phones || []).map((p) => {
+    const lastSync = String(p.lastSync || '');
+    const day = lastSync.slice(0, 10);
+    return {
+      phone: String(p.phone || ''),
+      lastSync,
+      worker: String(p.worker || ''),
+      sentToday: day === date,
+      recent: day >= seenFrom && day <= date,
+    };
+  });
   // Day-by-day totals from the 1st of the month up to the report date (for the trend lines).
   const days = [];
   for (let d = monthKey + '-01'; d <= date; d = addDays(d, 1)) days.push(d);
@@ -516,7 +524,7 @@ export function renderReportHtml(model, lang) {
     s += '<div style="' + RS.warn + '">⚠️ ' + escapeHtml(L.warnings) + ': ' + escapeHtml(w) + '</div>';
   });
   model.phones
-    .filter((p) => !p.sentToday)
+    .filter((p) => !p.sentToday && p.recent)
     .forEach((p) => {
       s += '<div style="' + RS.warn + '">⚠️ ' + escapeHtml(p.phone) + ': ' + escapeHtml(L.notToday) +
         (p.lastSync ? ' (' + escapeHtml(L.lastSent) + ' ' + escapeHtml(p.lastSync) + ')' : '') + '</div>';
@@ -597,6 +605,6 @@ export function renderReportText(model, lang) {
     out.push('');
   }
   period(L.month, model.month, false);
-  model.phones.filter((p) => !p.sentToday).forEach((p) => out.push('! ' + p.phone + ': ' + L.notToday));
+  model.phones.filter((p) => !p.sentToday && p.recent).forEach((p) => out.push('! ' + p.phone + ': ' + L.notToday));
   return out.join('\n');
 }

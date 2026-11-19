@@ -46,10 +46,35 @@ export function toast(msg, kind, ms) {
 
 export function confirmDialog(opts) {
   return new Promise((resolve) => {
-    const close = (answer) => {
-      overlay.remove();
-      resolve(answer);
+    let settled = false;
+    // The phone's Back button should close the question, not leave the screen, so the
+    // question gets a history step of its own. Answering gives that step back first
+    // and only then tells the caller, so the screen never moves twice at once.
+    const onKey = (ev) => ev.key === 'Escape' && close(false);
+    const stopListening = () => {
+      window.removeEventListener('popstate', onPop);
+      document.removeEventListener('keydown', onKey);
     };
+    function onPop() {
+      if (settled) return;
+      settled = true;
+      stopListening();
+      overlay.remove();
+      resolve(false);
+    }
+    function close(answer) {
+      if (settled) return;
+      settled = true;
+      stopListening();
+      overlay.remove();
+      const after = () => {
+        window.removeEventListener('popstate', after);
+        resolve(answer);
+      };
+      window.addEventListener('popstate', after);
+      history.back();
+    }
+    const noBtn = h('button', { class: 'btn', onclick: () => close(false) }, opts.no);
     const overlay = h(
       'div',
       { class: 'overlay', onclick: (e) => e.target === overlay && close(false) },
@@ -63,11 +88,15 @@ export function confirmDialog(opts) {
           'div',
           { class: 'dialog-actions' },
           h('button', { class: 'btn ' + (opts.danger ? 'btn-danger' : 'btn-primary'), onclick: () => close(true) }, opts.yes),
-          h('button', { class: 'btn', onclick: () => close(false) }, opts.no)
+          noBtn
         )
       )
     );
     document.body.append(overlay);
+    history.pushState({ depth: (history.state && history.state.depth) || 0 }, '', location.hash);
+    window.addEventListener('popstate', onPop);
+    document.addEventListener('keydown', onKey);
+    noBtn.focus(); // the safe answer, and it puts a screen reader inside the question
   });
 }
 
@@ -78,8 +107,8 @@ export function stepper(opts) {
   const step = opts.step || 1;
   let v = opts.value;
   const display = h('div', { class: 'stepper-value', 'aria-live': 'polite' });
-  const minus = h('button', { class: 'stepper-btn', 'aria-label': 'minus', onclick: () => set(v - step) }, icon('minus', 26, 2));
-  const plus = h('button', { class: 'stepper-btn', 'aria-label': 'plus', onclick: () => set(v + step) }, icon('plus', 26, 2));
+  const minus = h('button', { class: 'stepper-btn', 'aria-label': t('less'), onclick: () => set(v - step) }, icon('minus', 26, 2));
+  const plus = h('button', { class: 'stepper-btn', 'aria-label': t('more'), onclick: () => set(v + step) }, icon('plus', 26, 2));
   function draw() {
     display.textContent = fmtNum(v);
     minus.disabled = v <= min;
@@ -126,7 +155,7 @@ export function numpad(opts) {
     'div',
     { class: 'numpad' },
     keys.map((k) =>
-      h('button', { class: 'numkey num' + (k === '⌫' ? ' numkey-back' : ''), 'aria-label': k === '⌫' ? 'delete' : k, onclick: () => press(k) },
+      h('button', { class: 'numkey num' + (k === '⌫' ? ' numkey-back' : ''), 'aria-label': k === '⌫' ? t('backspace') : k, onclick: () => press(k) },
         k === '⌫' ? icon('backspace', 24) : k)
     )
   );

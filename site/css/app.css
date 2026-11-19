@@ -117,7 +117,7 @@ svg.ic { flex: none; display: block; }
 }
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  height: 40px; min-width: 40px; padding: 0 12px;
+  height: 48px; min-width: 48px; padding: 0 12px;
   border-radius: 999px; border: 1px solid var(--line-2);
   background: var(--fill); color: var(--text);
   font-size: 0.875rem; font-weight: 550; white-space: nowrap;
@@ -196,9 +196,9 @@ svg.ic { flex: none; display: block; }
 .btn-danger-outline { color: var(--danger-fg); border-color: var(--danger-line); background: var(--danger-bg); }
 .btn-danger-outline:hover { border-color: rgba(255, 92, 108, 0.55); background: rgba(255, 92, 108, 0.1); }
 .btn-big { min-height: 60px; font-size: 1.0625rem; }
-.btn-link { color: var(--text-2); font-weight: 550; font-size: 0.9375rem; padding: 8px 0; text-align: left; display: inline-flex; align-items: center; gap: 8px; }
+.btn-link { color: var(--text-2); font-weight: 550; font-size: 0.9375rem; min-height: 48px; padding: 8px 0; text-align: left; display: inline-flex; align-items: center; gap: 8px; }
 .btn-link:hover { color: var(--text); }
-.btn-mini { height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--fill); font-size: 0.8125rem; font-weight: 600; color: var(--text-2); }
+.btn-mini { height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--fill); font-size: 0.8125rem; font-weight: 600; color: var(--text-2); }
 .btn-mini:hover { color: var(--text); }
 
 /* ---------- Home ---------- */
@@ -282,7 +282,7 @@ svg.ic { flex: none; display: block; }
 .bar-stack { display: flex; gap: 2px; height: 8px; }
 .bar-stack > span { height: 100%; border-radius: 4px; }
 .bar-stack .hatch { background-image: repeating-linear-gradient(45deg, var(--c) 0 2px, transparent 2px 5px); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 60%, transparent); }
-.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.75rem; color: var(--text-2); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.8125rem; color: var(--text-2); }
 .legend i { display: inline-block; width: 14px; height: 8px; border-radius: 3px; margin-right: 6px; vertical-align: 0; background: var(--text-2); }
 .legend i.hatch { background-image: repeating-linear-gradient(45deg, var(--text-2) 0 2px, transparent 2px 5px); box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.6); background-color: transparent; }
 
@@ -353,7 +353,7 @@ svg.ic { flex: none; display: block; }
 
 /* ---------- Who ---------- */
 .lang-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: var(--r); background: var(--fill); border: 1px solid var(--line); }
-.btn-lang { min-height: 44px; border: none; background: transparent; color: var(--text-2); border-radius: 12px; }
+.btn-lang { min-height: 48px; border: none; background: transparent; color: var(--text-2); border-radius: 12px; }
 .btn-lang:hover { background: transparent; }
 .btn-lang.is-selected { background: var(--fill-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-3); }
 .person { --c: #E2E8F0; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 10px 16px 10px 10px; color: var(--text); font-size: 1.0625rem; font-weight: 600; text-align: left; }
@@ -432,18 +432,18 @@ svg.ic { flex: none; display: block; }
 
 /* ---------- Report dashboard ---------- */
 .report-nav { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; padding: 6px; border-radius: 999px; }
-.report-nav .icon-btn { width: 44px; height: 44px; padding: 0; }
+.report-nav .icon-btn { width: 48px; height: 48px; padding: 0; }
 .report-nav .icon-btn:disabled { opacity: 0.3; }
 .report-date { text-align: center; font-weight: 600; font-size: 0.9375rem; }
-.report-source { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.75rem; color: var(--text-2); }
+.report-source { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.8125rem; color: var(--text-2); }
 .report-source::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
 .report-source.is-sheet::before { background: var(--emerald); box-shadow: 0 0 6px var(--emerald); }
 .report-source.is-warn::before { background: var(--amber); }
 .panel { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .panel-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.9375rem; font-weight: 600; }
-.panel-title small { font-size: 0.75rem; color: var(--text-2); font-weight: 500; }
+.panel-title small { font-size: 0.8125rem; color: var(--text-2); font-weight: 500; }
 .section-title { display: flex; align-items: baseline; gap: 10px; margin: 10px 0 -4px; font-size: 1.125rem; font-weight: 650; letter-spacing: -0.02em; }
-.section-title small { font-size: 0.75rem; font-weight: 550; color: var(--text-2); letter-spacing: 0; }
+.section-title small { font-size: 0.8125rem; font-weight: 550; color: var(--text-2); letter-spacing: 0; }
 .rrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; }
 .rrow-name { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; font-weight: 550; min-width: 0; }
 .rrow-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -454,7 +454,7 @@ svg.ic { flex: none; display: block; }
 .wrow:last-child { border-bottom: none; padding-bottom: 0; }
 .wrow .action-icon { --a: var(--amber); width: 36px; height: 36px; border-radius: 10px; }
 .wrow-main { font-size: 0.9375rem; font-weight: 600; }
-.wrow-meta { font-size: 0.75rem; color: var(--text-2); margin-top: 2px; }
+.wrow-meta { font-size: 0.8125rem; color: var(--text-2); margin-top: 2px; }
 .pills { display: flex; flex-wrap: wrap; gap: 8px; }
 .pill { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 999px; background: var(--fill); border: 1px solid var(--line); font-size: 0.8125rem; color: var(--text-2); }
 .pill b { color: var(--text); font-weight: 650; }
@@ -607,3 +607,6 @@ svg.ic { flex: none; display: block; }
 :root[data-theme="light"] .stock-mark { background: #0B1220; }
 :root[data-theme="light"] .low-box { color: var(--danger-fg); background: rgba(225, 29, 72, 0.07); border-color: var(--danger-line); }
 :root[data-theme="light"] .stock-fill { background: #10B981; }
+
+/* Captions in the report: never under 13px, so they stay readable on a cheap phone. */
+.rrow-name small, .rrow-val small { font-size: 0.8125rem; }

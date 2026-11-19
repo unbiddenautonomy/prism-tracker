@@ -1,5 +1,5 @@
 {
-  "_help": "DEMO website copy: contains SAMPLE recipes only. The Sheet key is never here.",
+  "_help": "DEMO website copy: contains SAMPLE recipes only. Worker names and the Sheet key are never here.",
   "appName": "Prism",
   "ownerPin": "1234",
   "sheet": {
@@ -125,8 +125,5 @@
       }
     }
   ],
-  "workers": [
-    "Salimbhai",
-    "Son"
-  ]
+  "workers": []
 }
