@@ -29,7 +29,7 @@ The website never contains recipes or the secret key. Phones get the recipes fro
 
 **Updating later (automatic, through GitHub):**
 
-The project is in the private GitHub repository **unbiddenautonomy/prism-tracker**. Cloudflare publishes the `site/` folder from it every time a new version is pushed.
+The project is in the public GitHub repository **unbiddenautonomy/prism-tracker**. Cloudflare publishes the `site/` folder from it every time a new version is pushed.
 
 1. Rebuild the website copy:
    ```bash

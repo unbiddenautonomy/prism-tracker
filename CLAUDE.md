@@ -1,5 +1,7 @@
 # Notes for Claude
 
+Start with docs/BRIEF.md and keep it current. Keep every useful script, spec and prompt in the repo, never only in the project folder.
+
 ## Commits, pushes and CI minutes
 
 GitHub Actions minutes are limited each month, so:

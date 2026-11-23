@@ -1,5 +1,7 @@
 # Prism production tracker
 
+**New here? Start with [docs/BRIEF.md](docs/BRIEF.md)**: what this is, where it's live, the rules, and what's open.
+
 A simple phone app for the factory floor that records two things:
 
 - **Batches made**: pick a product and the number of batches. The app works out the raw materials used from the recipe.
@@ -105,6 +107,8 @@ The app works offline after the first open, and new versions reach phones automa
 | `tools/make_website.py` | Builds the website copy (`site/`, `prism-website.zip`) for Cloudflare |
 | `app/sw.js`, `app/*.webmanifest` | Offline support and the home-screen install details |
 | `app/admin.html` | The Prism Admin entry, which opens on Reports |
+| `docs/BRIEF.md` | One-page project brief: start here |
+| `docs/IMPROVEMENTS.md` | The review: what was fixed and what's still open |
 
 ## How the data stays safe
 
