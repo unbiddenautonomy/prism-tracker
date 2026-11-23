@@ -6,9 +6,9 @@ Reviewed 18 Nov 2026 (app 0.2.0). **Fixes applied 19 Nov 2026** — see below.
 
 The review found 22 things worth changing. **Eighteen have now been fixed**, including all three of the most serious: entries could be lost when two copies of the app were open, the app took about 20 seconds to open on a weak signal, and correcting a number in the Google Sheet left the raw material totals and stock wrong. Each one was reproduced before the fix and checked again after.
 
-Five are still open, and none of them loses data. The Sheet now copies itself to Drive every week, and entries now leave a phone even with the app shut, so the two biggest gaps are closed. The admin app also gained a **Recipes screen**, so products and their amounts can be added and changed from the phone instead of only in the Sheet.
+Five are still open, and none of them loses data. The Sheet now emails itself as a CSV backup every week, and entries now leave a phone even with the app shut, so the two biggest gaps are closed. The admin app also gained a **Recipes screen**, so products and their amounts can be added and changed from the phone instead of only in the Sheet.
 
-Checks that run on this machine: `bash tools/sheet-tests/run.sh` — **169 checks pass** (115 before this work, 54 added).
+Checks that run on this machine: `bash tools/sheet-tests/run.sh` — **169 checks passed at the time** (172 as of 23 Nov 2026) (115 before this work, 54 added).
 
 ## Fixed
 
