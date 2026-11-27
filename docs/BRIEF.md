@@ -14,7 +14,7 @@ A production tracker for a small chemical factory in India. Two Hindi-speaking w
 | | |
 |---|---|
 | Repo | https://github.com/unbiddenautonomy/prism-tracker (**public**, `main` is live and the only branch) |
-| Live app | https://prism-tracker.workiket.workers.dev (admin: `/admin`) |
+| Live app | https://prism-tracker.unbidden.workers.dev (admin: `/admin`) |
 | Sheet web app (phones sync here) | https://script.google.com/macros/s/AKfycbwJ5RhqKU-hZ3xmo1fTb2AdULoDmFl4eQiO8q2sElzeIRigEJNgNvCqtYoJMZOGuzGa4g/exec (a GET only prints the version; everything else needs the secret key) |
 | Stack | Plain HTML/CSS/JS ES modules, no framework and no npm. Service worker for offline. Python 3 build tools. Google Apps Script backend. Cloudflare Workers static assets (`wrangler.jsonc` serves `./site`). |
 | Deploy | Cloudflare **Workers Builds** builds on every push to `main`. A commit whose message has `[skip ci]` is skipped (checked on past commits). No GitHub Actions. |
