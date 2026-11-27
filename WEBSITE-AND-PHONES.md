@@ -23,7 +23,7 @@ The website never contains recipes or the secret key. Phones get the recipes fro
 2. **Create a free Cloudflare account** at **dash.cloudflare.com/sign-up** and confirm your email.
 3. **Start the upload:** in the Cloudflare dashboard, open **Workers & Pages** → **Create application** → **Get started** → **Drag and drop your files**.
 4. **Pick a project name,** for example `prism-tracker`. Your link looks like **`https://prism-tracker.<your-account>.workers.dev`**.
-   **Your link:** https://prism-tracker.workiket.workers.dev (admins: https://prism-tracker.workiket.workers.dev/admin)
+   **Your link:** https://prism-tracker.unbidden.workers.dev (admins: https://prism-tracker.unbidden.workers.dev/admin)
 5. **Upload:** drag **`prism-website.zip`** into the upload box → **Deploy site**.
 6. **Check it:** open the link on the Mac. You should see the Prism "Who are you?" screen.
 
